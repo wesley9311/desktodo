@@ -1,6 +1,6 @@
 # 浮窗待办
 
-**[⬇ 下载最新版](https://github.com/wesley9311/nianlun/releases/latest)** · macOS 12+ · 约 1.2 MB · 不用装 Xcode
+**[⬇ 下载最新版](https://github.com/wesley9311/desktodo/releases/latest)** · macOS 12+ · 约 1.2 MB · 不用装 Xcode
 
 一个贴在桌面上的待办浮窗。macOS，原生，**零依赖，数据只在你硬盘上**。
 
@@ -122,7 +122,7 @@ src/js/01..10-*.js       页面（3789 行 / 10 个分片），按职责分片�
 src/styles.css           样式（924 行）
 tools/bundle.sh          分片 → 单文件（WKWebView 用 file://，不能用 ES module）
 tools/audit.sh           边界审计六类：网络出口 / 反遥测 / 权限面 / 数据不入库 / 可移植性 / 口径唯一
-tools/check.js           110 条行为断言（headless Chrome，10 个用例）
+tools/check.js           118 条行为断言（headless Chrome，12 个用例）
 tools/dist.sh            打体验版分发包（ad-hoc 签名，谁都能跑）
 
 docs/MANUAL.md           操作手册：界面上每一处、每个菜单项、每种异常怎么办

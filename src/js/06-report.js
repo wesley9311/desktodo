@@ -83,7 +83,14 @@
       sum += c;
       if (c > max) max = c;
     }
-    if (!sum) return '<div class="r-empty">近 7 天还没有记录，勾掉第一件就会长出来</div>';
+    /* "一件没勾"和"我没开过"是两件事。这条以前只判 sum，于是整周开着但没勾东西时，
+       图表说"还没有记录"、下面那行总结说"我开着，一件都没勾"——同一屏里两句话打架。 */
+    if (!sum) {
+      var anyObs7 = counts.some(function (x) { return x.obs; });
+      return '<div class="r-empty">' + (anyObs7
+        ? '这 7 天都开着，一件没勾'
+        : '近 7 天还没有记录，勾掉第一件就会长出来') + '</div>';
+    }
     var bars = '';
     counts.forEach(function (it) {
       var hgt = 3 + Math.round(it.c / max * 18);
@@ -116,7 +123,12 @@
       sum += c;
       if (c > max) max = c;
     }
-    if (!sum) return '<div class="r-empty">这周还没有记录，勾掉第一件就会长出来</div>';
+    if (!sum) {
+      var anyObsW = counts.some(function (x) { return x.obs; });
+      return '<div class="r-empty">' + (anyObsW
+        ? '这周开着，一件没勾'
+        : '这周还没有记录，勾掉第一件就会长出来') + '</div>';
+    }
     var lab = ['一', '二', '三', '四', '五', '六', '日'];
     var bars = '';
     counts.forEach(function (it, i) {

@@ -487,7 +487,7 @@ desk-todo/
   tools/dist.sh         打体验版分发包：ad-hoc 签名 + 安装脚本 + 读我 + 体验清单
   tools/bundle.sh       前端打包（分片 → 单文件 app.js，必须保留同一个闭包）
   tools/hot.sh          只改页面时用：不重编译，权限不丢
-  tools/check.js        110 条前端行为断言（headless Chrome，10 个用例）
+  tools/check.js        118 条前端行为断言（headless Chrome，12 个用例）
   tools/mkcert.sh       一次性生成本地自签证书
   src/index.html        82 行，纯标记
   src/styles.css        811 行
@@ -713,7 +713,7 @@ desk-todo/
 | 恢复后自愈 | 同上 | 已用备份重建主文件，下次还有"上一版"可退 |
 | 清空是否真删 | `dbgWipe=true`，删前故意塞一个 `data.corrupt-9999…` | 目录只剩 197 字节空 `data.json`，无残留 |
 | 分发包能否跑 | 解压到 `/tmp` 直接 open | 进程起，日志正常；`cal=ask / screen=nofda` —— 权限对每个签名独立，这是对的 |
-| 断言 | `node tools/check.js` | **110 条 / 10 个用例全 PASS** |
+| 断言 | `node tools/check.js` | **118 条 / 12 个用例全 PASS** |
 
 **没验到的**：Developer ID 公证那条路没走过（没有账号），所以"双击就能用"
 这句话现在还不成立，只能说"右键打开一次就能用"。

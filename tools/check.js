@@ -283,6 +283,48 @@ const caseWeek = makePage('__t_week.html', {
   `
 });
 
+/* ---------------- 用例 W2：开着但一件没勾 ----------------
+   这一屏原来有两句话在打架：柱子区说"这周还没有记录"，
+   下面那行总结说"这 7 天我开着，一件都没勾"。同一次渲染里两种说法。
+   判据是 sum（完成件数），可 sum=0 不等于没有记录——那是把"有记录"说成"没记录"，
+   和产品最核心的那条口径正好相反。 */
+const caseWeekZero = makePage('__t_week0.html', {
+  load: {
+    nodes: [], seq: 1, log: [], daily: {},
+    flow: {}, byProj: {}, anniv: {}, fb: [], hide: {}, gap: {}, gapOff: 0,
+    said: {}, saidN: {}, vote: {}, seen: { [dayKeyOf(T0)]: 1 }, seenFrom: dayKeyOf(T0)
+  },
+  ext: null,
+  body: `
+  tab('wk');
+  var t = txt();
+  ok('空账但开着：不说"没有记录"', t.indexOf('这周还没有记录') < 0, t.slice(0, 160));
+  ok('空账但开着：说成"开着，没勾"', t.indexOf('没勾') >= 0, t.slice(0, 160));
+  tab('day');
+  ok('今日页同样不撒谎', txt().indexOf('这 7 天都开着') >= 0 || txt().indexOf('没有记录') < 0, txt().slice(0, 160));`
+});
+
+/* ---------------- 用例 S：最长连续是下界 ----------------
+   没记录的日子只能当断点，真实连续只会更长。全看见了才敢写确定值。 */
+const caseStreak = makePage('__t_streak.html', {
+  load: {
+    nodes: [], seq: 1, log: [],
+    daily: { [dayKeyOf(T0 - 86400000 * 2)]: 1, [dayKeyOf(T0 - 86400000)]: 2 },
+    flow: {}, byProj: {}, anniv: {}, fb: [], hide: {}, gap: {}, gapOff: 0,
+    said: {}, saidN: {}, vote: {},
+    seen: { [dayKeyOf(T0 - 86400000 * 2)]: 1, [dayKeyOf(T0 - 86400000)]: 1 },
+    seenFrom: dayKeyOf(T0 - 86400000 * 2)
+  },
+  ext: null,
+  body: `
+  tab('yr');
+  var t = txt();
+  ok('年轮的最长连续标了"≥"', t.indexOf('≥') >= 0, t.slice(0, 200));
+  ok('没有把下界写成确定值', /最长连续/.test(t), t.slice(0, 200));
+  tab('h1');
+  ok('半年页也标了"≥"', txt().indexOf('≥') >= 0, txt().slice(0, 200));`
+});
+
 /* ---------------- 用例 6：没记录 ≠ 0 件 ---------------- */
 const caseSeen = makePage('__t_seen.html', {
   load: {
@@ -494,7 +536,8 @@ const caseLedger = makePage('__t_ledger.html', {
 
 let bad = 0;
 for (const [name, file] of [['三层纠错', caseTruth], ['授权状态', casePerm], ['页签渲染', caseTabs],
-  ['欠账与日结', caseDebt], ['本周页签', caseWeek], ['观测口径', caseSeen], ['积压与占比', caseBacklog],
+  ['欠账与日结', caseDebt], ['本周页签', caseWeek], ['开着但没勾', caseWeekZero],
+  ['连续是下界', caseStreak], ['观测口径', caseSeen], ['积压与占比', caseBacklog],
   ['口径一致', caseCaliber], ['导出与状态', caseExport], ['账本自洽', caseLedger]]) {
   const out = run(file);
   const fails = (out.match(/^FAIL /gm) || []).length;

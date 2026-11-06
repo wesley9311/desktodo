@@ -30,7 +30,7 @@
     // active 是"有产出的天"，observed 是"我看得见的天"——两个数不能混着叫"有记录"
     el.annivSub.textContent = r.total + ' 件 · ' + r.active + ' 天有产出'
       + (r.observed > r.active ? ' · 看得见 ' + r.observed + ' 天' : '')
-      + (r.longest >= 2 ? ' · 最长连 ' + r.longest + ' 天' : '');
+      + (r.longest >= 2 ? ' · 最长连 ' + (r.observed < r.days ? '至少 ' : '') + r.longest + ' 天' : '');
     el.anniv.dataset.year = String(y);
     el.anniv.dataset.preview = force ? '1' : '0';
     el.anniv.classList.add('show');

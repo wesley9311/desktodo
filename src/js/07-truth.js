@@ -410,8 +410,12 @@
         + '<div class="r-tip">' + tipRange(r30) + '</div>' + quoteHtml();
     } else if (reportTab === 'h1') {
       var rh = rangeStats(182);
+      /* 只要区间里有一天「我看不见」，连续就只能说「至少这么多」：
+         没记录的日子会被当成断点，真实值只会更长。全看见了才敢写确定值。 */
+      var rhLong = longestStreak(182);
       body = '<div class="r-nums r-nums-wide">'
-        + numCell(rh.total, '半年完成') + numCell(rh.active, '有干活的天') + numCell(longestStreak(182), '最长连续')
+        + numCell(rh.total, '半年完成') + numCell(rh.active, '有干活的天')
+        + numCell((rh.observed < rh.days ? '≥ ' : '') + rhLong, '最长连续')
         + '</div>' + heatSvg(prevDayN(todayStart(), 181), todayStart())
         + '<div class="r-tip">' + tipRange(rh) + '</div>' + quoteHtml();
     } else {
@@ -421,7 +425,8 @@
       var ymo = yearMonths(yr);
       var mv = meetingVsDone(yr);
       body = '<div class="r-nums r-nums-wide">'
-        + numCell(ry.total, '完成') + numCell(ry.active, '动手的天') + numCell(ry.longest, '最长连续')
+        + numCell(ry.total, '完成') + numCell(ry.active, '动手的天')
+        + numCell((ry.observed < ry.days ? '≥ ' : '') + ry.longest, '最长连续')
         + '</div>'
         + monthBars(yr)
         + flowLine(yfl, ry.total)
