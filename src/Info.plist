@@ -2,39 +2,39 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<key>CFBundleIconFile</key>
-	<string>AppIcon</string>
-	<key>CFBundleName</key>
-	<string>浮窗待办</string>
 	<key>CFBundleDisplayName</key>
 	<string>浮窗待办</string>
 	<key>CFBundleExecutable</key>
 	<string>DeskTodo</string>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
 	<key>CFBundleIdentifier</key>
 	<string>local.desktodo.app</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>浮窗待办</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>1.1.0</string>
+	<string>1.1.1</string>
 	<key>CFBundleVersion</key>
-	<string>2</string>
+	<string>3</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>12.0</string>
-	<key>NSCalendarsUsageDescription</key>
-	<string>读取你日历里已有的事项，用来对照「这一天有会 / 没会」和实际完成量。只读，不上传。</string>
-	<key>NSCalendarsFullAccessUsageDescription</key>
-	<string>读取你日历里已有的事项，用来对照「这一天有会 / 没会」和实际完成量。只读，不上传。</string>
-	<key>NSRemindersUsageDescription</key>
-	<string>读取提醒事项的完成与过期数量，和本应用的清单放在一起看。只读，不修改你的提醒事项。</string>
-	<key>NSRemindersFullAccessUsageDescription</key>
-	<string>读取提醒事项的完成与过期数量，和本应用的清单放在一起看。只读，不修改你的提醒事项。</string>
 	<key>LSUIElement</key>
 	<true/>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>读取你日历里已有的事项，用来对照「这一天有会 / 没会」和实际完成量。只读，不上传。</string>
+	<key>NSCalendarsUsageDescription</key>
+	<string>读取你日历里已有的事项，用来对照「这一天有会 / 没会」和实际完成量。只读，不上传。</string>
 	<key>NSHighResolutionCapable</key>
 	<true/>
 	<key>NSHumanReadableCopyright</key>
 	<string>浮窗待办 · 本地小工具</string>
+	<key>NSRemindersFullAccessUsageDescription</key>
+	<string>读取提醒事项的完成与过期数量，和本应用的清单放在一起看。只读，不修改你的提醒事项。</string>
+	<key>NSRemindersUsageDescription</key>
+	<string>读取提醒事项的完成与过期数量，和本应用的清单放在一起看。只读，不修改你的提醒事项。</string>
 </dict>
 </plist>
