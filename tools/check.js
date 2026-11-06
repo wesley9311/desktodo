@@ -184,7 +184,95 @@ const caseTabs = makePage('__t_tabs.html', {
      meetRow ? meetRow.getAttribute('title') : '行未出现');`
 });
 
-/* ---------------- 用例 4：没记录 ≠ 0 件 ---------------- */
+/* ---------------- 用例 D：欠账有出口 + 日结报得准 ----------------
+   欠账条以前只是半句话：点不动，也销不掉。这里断言它真的能点、能销。 */
+const T0 = (() => {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
+})();
+const dayKeyOf = ts => {
+  const d = new Date(ts);
+  return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate());
+};
+const YDAY_K = dayKeyOf(T0 - 86400000);
+const WEEK_START_K = dayKeyOf(T0 - ((new Date(T0).getDay() + 6) % 7) * 86400000);
+
+const debtNodes = [
+  { id: 1, type: 'task', text: '修落地页文案', done: false, due: T0, created: T0 - 86400000 * 9, carried: 8 },
+  { id: 2, type: 'task', text: '回电话给老张', done: false, due: T0, created: T0 - 86400000 * 6, carried: 5 },
+  { id: 3, type: 'task', text: '整理照片', done: false, due: T0, created: T0 - 86400000 * 4, carried: 3 },
+  { id: 4, type: 'task', text: '今天的新事', done: false, due: T0, created: T0, carried: 0 }
+];
+
+const caseDebt = makePage('__t_debt.html', {
+  load: {
+    nodes: debtNodes, seq: 9, log: [], daily: { [YDAY_K]: 7 },
+    flow: {}, byProj: {}, anniv: {}, fb: [], hide: {}, gap: {}, gapOff: 0,
+    said: {}, saidN: {}, vote: {}, seen: { [YDAY_K]: 1 }, seenFrom: YDAY_K
+  },
+  ext: null,
+  body: `
+  var db = document.querySelector('.a-debt');
+  ok('欠账条出现', !!db, db ? db.textContent : '没有');
+  ok('欠账条报件数', !!db && db.textContent.indexOf('3') >= 0, db ? db.textContent : '');
+  ok('欠账条给最久天数', !!db && db.textContent.indexOf('8 天') >= 0, db ? db.textContent : '');
+
+  var settle = document.querySelector('.a-settle');
+  ok('日结条出现', !!settle, settle ? settle.textContent : '没有');
+  ok('日结报昨天的实数', !!settle && settle.textContent.indexOf('昨天结了 7 件') >= 0,
+     settle ? settle.textContent : '');
+
+  if (db) db.click();
+  var rows = document.querySelectorAll('.d-row');
+  ok('面板列出 3 件', rows.length === 3, 'rows=' + rows.length);
+  ok('拖得最久的排第一', rows.length > 0 && rows[0].textContent.indexOf('8天') >= 0,
+     rows.length ? rows[0].textContent : '');
+  ok('写了销账是什么意思', document.body.textContent.indexOf('不算完成，也不再欠着') >= 0);
+
+  if (rows.length) {
+    var wv = rows[0].querySelector('.d-wv');
+    if (wv) wv.click();
+  }
+  var after = document.querySelectorAll('.d-row');
+  ok('销账后少一件', after.length === 2, 'rows=' + after.length);
+  // 只看清单和面板，不看 #out —— 断言日志自己会带着任务名，那是测试的副产品
+  var stillThere = [].filter.call(document.querySelectorAll('.d-row, #list li'), function (n) {
+    return n.textContent.indexOf('修落地页文案') >= 0;
+  }).length;
+  ok('销掉的那件从清单消失', stillThere === 0, '还在 ' + stillThere + ' 处');
+
+  var backs = document.querySelector('.d-back');
+  ok('有返回今天的出口', !!backs);
+  if (backs) backs.click();
+  ok('返回后回到日程', !!document.querySelector('.a-row'));
+  `
+});
+
+/* ---------------- 用例 W：本周页签 ----------------
+   本周只算"周一到今天"，不拿 7 天当分母。 */
+const caseWeek = makePage('__t_week.html', {
+  load: {
+    nodes: [], seq: 1, log: [], daily: { [WEEK_START_K]: 2 },
+    flow: {}, byProj: {}, anniv: {}, fb: [], hide: {}, gap: {}, gapOff: 0,
+    said: {}, saidN: {}, vote: {}, seen: { [WEEK_START_K]: 1 }, seenFrom: WEEK_START_K
+  },
+  ext: null,
+  body: `
+  tab('wk');
+  var t = txt();
+  ok('本周页签有内容', t.length > 30, t.slice(0, 40));
+  ok('标了本周完成', t.indexOf('本周完成') >= 0, t.slice(0, 120));
+  ok('不拿 7 天当分母', t.indexOf('周一到今天') >= 0, t.slice(0, 200));
+  var bars = document.querySelectorAll('.r-bar');
+  var wd = (new Date().getDay() + 6) % 7;
+  ok('柱子只画到今天', bars.length === wd + 1, 'bars=' + bars.length + ' 应为 ' + (wd + 1));
+  ok('周一的柱子有数', bars.length > 0);
+  ok('昨天没记录就不日结', !document.querySelector('.a-settle'));
+  `
+});
+
+/* ---------------- 用例 6：没记录 ≠ 0 件 ---------------- */
 const caseSeen = makePage('__t_seen.html', {
   load: {
     nodes: [], seq: 1, log: [],
@@ -319,7 +407,9 @@ const caseExport = makePage('__t_export.html', {
 });
 
 let bad = 0;
-for (const [name, file] of [['三层纠错', caseTruth], ['授权状态', casePerm], ['页签渲染', caseTabs], ['观测口径', caseSeen], ['积压与占比', caseBacklog], ['口径一致', caseCaliber], ['导出与状态', caseExport]]) {
+for (const [name, file] of [['三层纠错', caseTruth], ['授权状态', casePerm], ['页签渲染', caseTabs],
+  ['欠账与日结', caseDebt], ['本周页签', caseWeek], ['观测口径', caseSeen], ['积压与占比', caseBacklog],
+  ['口径一致', caseCaliber], ['导出与状态', caseExport]]) {
   const out = run(file);
   const fails = (out.match(/^FAIL /gm) || []).length;
   const passes = (out.match(/^PASS /gm) || []).length;

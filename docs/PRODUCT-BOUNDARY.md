@@ -115,7 +115,9 @@ L4 拿到的是**内容**（这个会的标题是"和 X 谈离职"、这个窗�
 它每天都会被 rollover 改写——今天去看"3 月 2 日该做几件"，读到的是被改写过的今天，
 等于拿今天的排期伪造昨天的计划。零回填不是洁癖，是这个字段的物理性质决定的。
 
-顺带：真正能反映拖延的是 `carried`（顺延天数），不是 `due`。它没被任何界面读到，目前只在数据里躺着。
+顺带：真正能反映拖延的是 `carried`（顺延天数），不是 `due`。它已经上了界面
+（每件拖够 2 天挂「顺延N天」徽标，头部有「N 件拖了 2 天以上」），但**只有提示、没有出口**：
+点不进去，也销不掉。这是抽象断在半路的地方，补法见 [POSITIONING.md](POSITIONING.md) 第 4 节。
 
 ### 3.3 `remindAt` 才是你自己设的，而且用法很明确
 
@@ -485,7 +487,7 @@ desk-todo/
   tools/dist.sh         打体验版分发包：ad-hoc 签名 + 安装脚本 + 读我 + 体验清单
   tools/bundle.sh       前端打包（分片 → 单文件 app.js，必须保留同一个闭包）
   tools/hot.sh          只改页面时用：不重编译，权限不丢
-  tools/check.js        76 条前端行为断言（headless Chrome，7 个用例）
+  tools/check.js        96 条前端行为断言（headless Chrome，9 个用例）
   tools/mkcert.sh       一次性生成本地自签证书
   src/index.html        82 行，纯标记
   src/styles.css        811 行
@@ -711,7 +713,7 @@ desk-todo/
 | 恢复后自愈 | 同上 | 已用备份重建主文件，下次还有"上一版"可退 |
 | 清空是否真删 | `dbgWipe=true`，删前故意塞一个 `data.corrupt-9999…` | 目录只剩 197 字节空 `data.json`，无残留 |
 | 分发包能否跑 | 解压到 `/tmp` 直接 open | 进程起，日志正常；`cal=ask / screen=nofda` —— 权限对每个签名独立，这是对的 |
-| 断言 | `node tools/check.js` | **76 条 / 7 个用例全 PASS** |
+| 断言 | `node tools/check.js` | **96 条 / 9 个用例全 PASS** |
 
 **没验到的**：Developer ID 公证那条路没走过（没有账号），所以"双击就能用"
 这句话现在还不成立，只能说"右键打开一次就能用"。

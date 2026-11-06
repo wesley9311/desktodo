@@ -220,6 +220,17 @@
     return { done: done, pending: pending, total: done + pending, carried: carried };
   }
 
+  /* 欠账：拖着没做完、已经顺延 2 天以上的，按拖得最久的排前面。
+     只读 carried —— 这个数从第一天就在记，缺的从来不是数据，是出口。
+     不新算任何衍生指标：这里列出来的每一件，用户都能自己数一遍对上。 */
+  function debts() {
+    return state.nodes.filter(function (n) {
+      return n.type === 'task' && !n.done && (n.carried || 0) >= 2;
+    }).sort(function (a, b) {
+      return (b.carried || 0) - (a.carried || 0) || (a.id - b.id);
+    });
+  }
+
   /* 连续天数：今天还没开张不算断，从昨天往前数 */
   /* 连续有产出的天数。碰到"我没看见过的那天"就停：
      不跨过未知继续数，否则会把"中间不知道"说成"一直连着"。 */

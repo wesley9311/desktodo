@@ -612,6 +612,62 @@
     cursor: pointer; border-radius: 6px;
   }
   .a-more:hover { color: var(--accent); background: var(--card); }
+
+  /* 日结：每天第一次打开露一次，点 ✕ 当天不再出现 */
+  .a-settle {
+    display: flex; align-items: center; gap: 6px;
+    margin: 0 1px 6px; padding: 4px 7px;
+    border-radius: 7px; background: var(--card);
+  }
+  .st-t {
+    flex: 1; min-width: 0; font-size: 10.5px; color: var(--fg2);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .st-x {
+    flex: none; width: 16px; height: 16px; padding: 0; border: 0; border-radius: 4px;
+    background: transparent; color: var(--fg3); font-size: 9px; line-height: 1;
+    cursor: pointer; display: flex; align-items: center; justify-content: center;
+  }
+  .st-x:hover { color: var(--fg); background: var(--card-h); }
+
+  /* 欠账条：一个能点开的入口，不再只是半句话 */
+  .a-debt {
+    display: flex; align-items: center; gap: 5px; width: 100%;
+    margin: 0 1px 6px; padding: 4px 7px; border: 0; border-radius: 7px;
+    background: var(--warn-soft); color: var(--warn);
+    font-family: inherit; font-size: 10.5px; text-align: left; cursor: pointer;
+  }
+  .a-debt b { font-weight: 600; }
+  .a-debt .d-max { margin-left: auto; opacity: .8; font-variant-numeric: tabular-nums; }
+  .a-debt .d-go { flex: none; opacity: .7; }
+  .a-debt:hover { filter: brightness(.97); }
+  .a-debt:hover .d-go { opacity: 1; }
+
+  /* 欠账面板 */
+  .d-row { display: flex; align-items: center; gap: 6px; padding: 4px 5px; border-radius: 8px; }
+  .d-row:hover { background: var(--card); }
+  .d-n {
+    flex: none; width: 30px; font-size: 9.5px; color: var(--warn);
+    font-variant-numeric: tabular-nums;
+  }
+  .d-t {
+    flex: 1; min-width: 0; font-size: 12px; color: var(--fg);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .d-go-btn, .d-wv {
+    flex: none; border: 0; border-radius: 5px; cursor: pointer;
+    font-family: inherit; font-size: 9.5px; line-height: 1.6; padding: 0 5px;
+  }
+  .d-go-btn { background: var(--accent-soft); color: var(--accent); }
+  .d-go-btn:hover { background: var(--accent); color: #fff; }
+  .d-wv { background: transparent; color: var(--fg3); }
+  .d-wv:hover { background: var(--card-h); color: var(--warn); }
+  .d-back {
+    flex: none; border: 0; background: transparent; color: var(--fg3);
+    font-family: inherit; font-size: 10px; cursor: pointer; padding: 0 2px;
+  }
+  .d-back:hover { color: var(--accent); }
+  .d-note { padding: 5px 6px 2px; font-size: 9.5px; color: var(--fg3); line-height: 1.5; }
   .a-empty { font-size: 11.5px; color: var(--fg2); padding: 7px 4px 10px; text-align: center; }
 
   /* ---------- 边缘拖拽：上下左右都能拉 ---------- */

@@ -175,11 +175,106 @@
     return row;
   }
 
+  /* ---------------- 日结：每天第一次打开，先把昨天结一句 ----------------
+     只报「昨天结了 N 件」——daily 账本里有据可查，用户能自己数回来。
+     不报「昨天欠了几件」：历史上的未完成数没法从 data.json 可靠重建
+     （任务会被删、会被顺延、会被销账），编一个看起来像真的数，比不报恶劣得多。
+     今天欠多少，在下面的「欠账」里另算——那是还活着的任务，不是历史。 */
+  var settleShown = '';   // 已经给哪一天看过，一天里不反复出现
+
+  function settleText() {
+    var y = prevDay(todayStart());
+    if (!dayObserved(y)) return '';        // 昨天没记录：不编，也不打扰
+    var n = dayDone(y);
+    return n > 0 ? '昨天结了 ' + n + ' 件' : '昨天没结下东西';
+  }
+
+  var debtOpen = false;
+
+  function renderDebt(host) {
+    var list = debts();
+    // 销到最后一件就自动退回今天，不让人停在一个空面板上
+    if (!list.length) { debtOpen = false; renderAgenda(); return; }
+    var worst = list[0].carried || 0;
+
+    var head = document.createElement('div');
+    head.className = 'a-head';
+    var ttl = document.createElement('span');
+    ttl.className = 'a-day';
+    ttl.textContent = '欠账 · ' + list.length + ' 件';
+    var meta = document.createElement('span');
+    meta.className = 'a-meta';
+    meta.textContent = '最久 ' + worst + ' 天';
+    var back = document.createElement('button');
+    back.className = 'd-back';
+    back.textContent = '返回';
+    back.title = '回到今天的清单';
+    back.addEventListener('click', function (e) {
+      e.stopPropagation();
+      debtOpen = false;
+      renderAgenda();
+    });
+    head.appendChild(ttl);
+    head.appendChild(meta);
+    head.appendChild(back);
+    host.appendChild(head);
+
+    list.forEach(function (t) {
+      var row = document.createElement('div');
+      row.className = 'd-row';
+
+      var n = document.createElement('span');
+      n.className = 'd-n';
+      n.textContent = (t.carried || 0) + '天';
+      n.title = '这件已经在清单上放了 ' + (t.carried || 0) + ' 天';
+
+      var tx = document.createElement('span');
+      tx.className = 'd-t';
+      tx.textContent = t.text;
+      tx.title = t.text;
+
+      var go = document.createElement('button');
+      go.className = 'd-go-btn';
+      go.textContent = '今天';
+      go.title = '放回今天，今天就看得见它';
+      go.addEventListener('click', function (e) {
+        e.stopPropagation();
+        t.due = todayStart();
+        persist();
+        render();
+        toast('放回今天了');
+      });
+
+      var wv = document.createElement('button');
+      wv.className = 'd-wv';
+      wv.textContent = '销账';
+      wv.title = '记一笔放弃：不算完成，也不再欠着';
+      wv.addEventListener('click', function (e) {
+        e.stopPropagation();
+        removeNode(t.id);      // 内部按「删掉一件没做完的」记一笔 x，不新增口径
+        toast('已销账 · 不算完成');
+      });
+
+      row.appendChild(n);
+      row.appendChild(tx);
+      row.appendChild(go);
+      row.appendChild(wv);
+      host.appendChild(row);
+    });
+
+    var note = document.createElement('div');
+    note.className = 'd-note';
+    note.textContent = '销账 = 认下这件不做了。不算完成，也不再欠着。';
+    host.appendChild(note);
+  }
+
   function renderAgenda() {
     if (!el.agenda) return;
     var info = agendaInfo();
     var host = el.agenda;
     host.innerHTML = '';
+
+    if (debtOpen) { renderDebt(host); return; }
 
     var head = document.createElement('div');
     head.className = 'a-head';
@@ -192,8 +287,6 @@
     var doneToday = info.todayDone || 0;
     var bits = [];
     if (total) bits.push('还剩 ' + total + ' 件');
-    var carried = info.list.filter(function (x) { return (x.carried || 0) >= 2; }).length;
-    if (carried) bits.push(carried + ' 件拖了 2 天以上');
     if (doneToday) bits.push('今日已做 ' + doneToday);
     var hasAny = state.nodes.some(function (n) { return n.type === 'task'; });
     if (bits.length) meta.textContent = bits.join(' · ');
@@ -202,6 +295,47 @@
     head.appendChild(day);
     head.appendChild(meta);
     host.appendChild(head);
+
+    // 日结：每天第一次打开露一次，点 ✕ 当天不再出现
+    var settle = settleText();
+    if (settle && settleShown !== dayKey(Date.now())) {
+      var pend = statsToday().pending;
+      var sb = document.createElement('div');
+      sb.className = 'a-settle';
+      var stx = document.createElement('span');
+      stx.className = 'st-t';
+      stx.textContent = settle + ' · 今天' + (pend ? '还剩 ' + pend + ' 件' : '还没写');
+      stx.title = '每天第一次打开时结一次，看过就不再出现';
+      var sx = document.createElement('button');
+      sx.className = 'st-x';
+      sx.textContent = '✕';
+      sx.title = '今天不再显示';
+      sx.addEventListener('click', function (e) {
+        e.stopPropagation();
+        settleShown = dayKey(Date.now());
+        renderAgenda();
+      });
+      sb.appendChild(stx);
+      sb.appendChild(sx);
+      host.appendChild(sb);
+    }
+
+    // 欠账入口：原来这里只有半句话，点不动也销不掉
+    var dl = debts();
+    if (dl.length) {
+      var db = document.createElement('button');
+      db.className = 'a-debt';
+      db.innerHTML = '有 <b>' + dl.length + '</b> 件拖了 2 天以上'
+        + '<span class="d-max">最久 ' + (dl[0].carried || 0) + ' 天</span>'
+        + '<span class="d-go">看</span>';
+      db.title = '点开看是哪几件：可以放回今天，也可以销账';
+      db.addEventListener('click', function (e) {
+        e.stopPropagation();
+        debtOpen = true;
+        renderAgenda();
+      });
+      host.appendChild(db);
+    }
 
     if (!total) {
       var em = document.createElement('div');

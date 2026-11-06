@@ -332,8 +332,8 @@
         : (shortDate(d.getTime()) + ' ' + weekday(d))) + '</span>'
       + '<button class="r-x" data-act="close">收起</button></div>'
       + '<div class="r-tabs">'
-      + tabBtn('day', '今日') + tabBtn('d30', '30 天') + tabBtn('h1', '半年')
-      + tabBtn('yr', '年轮')
+      + tabBtn('day', '今日') + tabBtn('wk', '本周') + tabBtn('d30', '30 天')
+      + tabBtn('h1', '半年') + tabBtn('yr', '年轮')
       + '</div>';
 
     var body = '';
@@ -358,6 +358,26 @@
         + srcBlock(todaySrcLines())
         + gapAskHtml()
         + '<div class="r-tip">' + tipDay(st, stk) + '</div>';
+    } else if (reportTab === 'wk') {
+      /* 本周 = 周一到今天。天数按"已经过了几天"算，不按 7 天算：
+         拿 5 天除以 7 当分母，等于提前给这一周判了个低分。 */
+      var wn = weekIdx(todayStart()) + 1;
+      var rw = rangeStats(wn);
+      var wnote;
+      if (rw.total) {
+        wnote = '周一到今天 ' + rw.days + ' 天，完成 ' + rw.total + ' 件';
+        if (rw.active) wnote += '，动手的 ' + rw.active + ' 天平均 ' + (rw.total / rw.active).toFixed(1) + ' 件';
+        wnote += '。';
+        if (rw.best.n > 1) wnote += '最猛 ' + shortDate(rw.best.day) + '，一天 ' + rw.best.n + ' 件。';
+      } else if (rw.observed) {
+        wnote = '这 ' + rw.days + ' 天我开着，一件都没勾。';
+      } else {
+        wnote = '这 ' + rw.days + ' 天没有任何记录，我不知道那几天做没做。';
+      }
+      body = '<div class="r-nums r-nums-wide">'
+        + numCell(rw.total, '本周完成') + numCell(rw.active, '动手的天') + numCell(rw.best.n, '最猛一天')
+        + '</div>' + weekBars(wn)
+        + '<div class="r-tip">' + wnote + '</div>' + quoteHtml();
     } else if (reportTab === 'd30') {
       var r30 = rangeStats(30);
       body = '<div class="r-nums r-nums-wide">'

@@ -98,6 +98,38 @@
     return bars;
   }
 
+  /* 本周：周一算一周的头。只画到今天——后面的天还没发生，
+     画成 0 会让"这周还没过完"看起来像"这周不行"。 */
+  function weekIdx(ts) {
+    var wd = new Date(ts || todayStart()).getDay();   // 0 = 周日
+    return (wd + 6) % 7;                              // 0 = 周一
+  }
+
+  function weekBars(n) {
+    var t0 = todayStart();
+    var start = prevDayN(t0, weekIdx(t0));
+    var counts = [], max = 1, sum = 0;
+    for (var i = 0; i < n; i++) {
+      var day = prevDayN(start, -i);
+      var c = dayDone(day);
+      counts.push({ day: day, c: c, obs: dayObserved(day) });
+      sum += c;
+      if (c > max) max = c;
+    }
+    if (!sum) return '<div class="r-empty">这周还没有记录，勾掉第一件就会长出来</div>';
+    var lab = ['一', '二', '三', '四', '五', '六', '日'];
+    var bars = '';
+    counts.forEach(function (it, i) {
+      var hgt = 3 + Math.round(it.c / max * 18);
+      var isToday = dayStart(it.day) === t0;
+      bars += '<div class="r-bar' + (isToday ? ' today' : '') + '" title="'
+        + (it.obs ? shortDate(it.day) + ' 完成 ' + it.c + ' 件' : shortDate(it.day) + ' 没记录') + '">'
+        + '<i class="' + (isToday ? 'on ' : '') + (it.obs ? '' : 'unk') + '" style="height:' + hgt + 'px"></i>'
+        + '<u>' + (isToday ? '今' : lab[i]) + '</u></div>';
+    });
+    return bars;
+  }
+
   function thirtyBars(n) {
     var t0 = todayStart(), max = 1, bars = '';
     var list = rangeDays(n);
