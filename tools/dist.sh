@@ -23,7 +23,7 @@ PKGNAME="$APPNAME-$VERSION"
 PKG="$STAGE/$PKGNAME"
 APP="$PKG/$APPNAME.app"
 # 文件名用 ASCII：GitHub 上传附件时会把中文名整个换成连字符，
-# 变成 "-.-1.1.1.zip" 这种谁也不敢下的东西。zip 里面的文件名照旧是中文。
+# 变成 "-.-<版本>.zip" 这种谁也不敢下的东西。zip 里面的文件名照旧是中文。
 ZIP="$OUTDIR/DeskTodo-$VERSION.zip"
 
 echo "==> 清理"
@@ -237,6 +237,11 @@ cat > "$PKG/读我.txt" <<'EOT'
 直接粘给我就行。
 
 EOT
+
+# 版本号只有 Info.plist 一个来源，正文里不写死（写了就会过期）。
+# 0.x 不是谦虚，是实情：还没有外人把它当日常工具用过。这句话要和使用者见面。
+awk -v v="$VERSION" 'NR==2{print; print ""; print "版本 " v "｜0.x 的意思是：还没有外人连续用过它。请按测试版对待。"; next}1' \
+  "$PKG/读我.txt" > "$PKG/读我.txt.new" && mv "$PKG/读我.txt.new" "$PKG/读我.txt"
 
 # ---- 体验清单 ----
 cat > "$PKG/体验清单.md" <<'EOT'
