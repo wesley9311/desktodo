@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>日账页 · 纸笔版</title>
+<style>
+  :root {
+    --ink: #1c1c1e;
+    --mid: #6b6b70;
+    --faint: #d8d8dc;
+    --line: #b9b9bf;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: #ececee;
+    color: var(--ink);
+    font-family: -apple-system, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Segoe UI", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* 屏幕上那层提示，打印时消失 */
+  .hint {
+    max-width: 210mm; margin: 24px auto 0; padding: 14px 18px;
+    background: #fff; border-left: 3px solid var(--ink);
+    font-size: 13px; line-height: 1.75; color: var(--mid);
+  }
+  .hint b { color: var(--ink); }
+  .hint kbd {
+    font: inherit; background: #f0f0f2; border: 1px solid var(--faint);
+    border-radius: 3px; padding: 1px 5px; color: var(--ink);
+  }
+
+  .page {
+    width: 210mm; min-height: 297mm;
+    margin: 16px auto; padding: 18mm 18mm 14mm;
+    background: #fff;
+    display: flex; flex-direction: column;
+  }
+
+  /* ---------- 页 1：账页 ---------- */
+  .head { display: flex; align-items: baseline; justify-content: space-between; }
+  .title { font-size: 20px; font-weight: 600; letter-spacing: 0.18em; }
+  .title span { font-weight: 300; letter-spacing: 0; color: var(--mid); font-size: 12px; margin-left: 10px; }
+  .date { font-size: 13px; color: var(--mid); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .date u { text-decoration: none; border-bottom: 1px solid var(--line); display: inline-block; min-width: 13mm; }
+  .date u.w { min-width: 16mm; }
+
+  .sec {
+    margin-top: 12mm; font-size: 12px; color: var(--mid);
+    letter-spacing: 0.08em; padding-bottom: 2mm;
+    border-bottom: 1px solid var(--ink);
+  }
+
+  .rows { flex: 1; display: flex; flex-direction: column; }
+  .row {
+    flex: 1; min-height: 21mm;
+    display: flex; align-items: flex-end; gap: 5mm;
+  }
+  .box {
+    width: 5.5mm; height: 5.5mm; flex: none;
+    border: 1.2px solid var(--line); border-radius: 1mm;
+    margin-bottom: 1.6mm;
+  }
+  .line { flex: 1; height: 1px; background: var(--faint); margin-bottom: 1.6mm; }
+
+  .tally {
+    margin-top: 8mm; padding-top: 5mm; border-top: 1px solid var(--ink);
+    display: flex; gap: 10mm; font-size: 13px; color: var(--mid);
+  }
+  .tally i { font-style: normal; display: inline-block; min-width: 12mm; border-bottom: 1px solid var(--line); }
+
+  .focus { margin-top: 7mm; font-size: 13px; color: var(--mid); display: flex; align-items: flex-end; gap: 3mm; }
+  .focus u { flex: 1; text-decoration: none; border-bottom: 1px solid var(--line); height: 5mm; }
+
+  .foot {
+    margin-top: auto; padding-top: 10mm;
+    display: flex; justify-content: space-between; align-items: flex-end;
+    font-size: 10px; color: var(--mid); letter-spacing: 0.22em;
+  }
+
+  /* ---------- 页 2：怎么用 + 三个问题 ---------- */
+  .p2 h2 { font-size: 15px; font-weight: 600; margin: 0 0 6mm; letter-spacing: 0.04em; }
+  .p2 p { font-size: 13px; line-height: 2.05; color: #2a2a2c; margin: 0 0 4.5mm; }
+  .p2 p em { font-style: normal; background: #f2f2f4; padding: 0 2px; }
+  .p2 ol { margin: 0; padding: 0; list-style: none; counter-reset: q; }
+  .p2 li {
+    counter-increment: q; position: relative;
+    padding: 5mm 0 5mm 11mm; border-top: 1px solid var(--faint);
+    font-size: 13px; line-height: 1.85;
+  }
+  .p2 li::before {
+    content: counter(q);
+    position: absolute; left: 0; top: 5mm;
+    font-size: 11px; color: var(--mid); font-variant-numeric: tabular-nums;
+  }
+  .p2 li b { font-weight: 600; }
+  .p2 li small { display: block; color: var(--mid); font-size: 11.5px; margin-top: 1.5mm; }
+  .rule {
+    margin: 7mm 0; padding: 5.5mm 6.5mm;
+    border: 1px solid var(--ink); font-size: 12.5px; line-height: 2.1;
+  }
+  .rule strong { font-weight: 600; }
+
+  /* ---------- 打印 ---------- */
+  @page { size: A4; margin: 0; }
+  @media print {
+    html, body { background: #fff; }
+    .hint { display: none; }
+    .page { margin: 0; box-shadow: none; page-break-after: always; min-height: 297mm; }
+    .page:last-child { page-break-after: auto; }
+  }
+  @media screen {
+    .page { box-shadow: 0 1px 3px rgba(0,0,0,.14), 0 12px 32px rgba(0,0,0,.07); }
+  }
+</style>
+</head>
+<body>
+
+<div class="hint">
+  按 <kbd>⌘P</kbd>（Windows 是 <kbd>Ctrl+P</kbd>）打印，两页一张双面纸，或打两张单面。<br>
+  <b>第 1 页是账页，请打印 3 张</b>（连用三天）；第 2 页只有一张，看完就能回答。不需要装任何软件。
+</div>
+
+<!-- ============ 页 1 ============ -->
+<section class="page">
+  <div class="head">
+    <div class="title">日 账<span>一天一页</span></div>
+    <div class="date">
+      <u></u> 年 <u></u> 月 <u></u> 日　星期 <u class="w"></u>
+    </div>
+  </div>
+
+  <div class="sec">今天我要办这几件</div>
+
+  <div class="rows">
+    <div class="row"><span class="box"></span><span class="line"></span></div>
+    <div class="row"><span class="box"></span><span class="line"></span></div>
+    <div class="row"><span class="box"></span><span class="line"></span></div>
+    <div class="row"><span class="box"></span><span class="line"></span></div>
+    <div class="row"><span class="box"></span><span class="line"></span></div>
+    <div class="row"><span class="box"></span><span class="line"></span></div>
+    <div class="row"><span class="box"></span><span class="line"></span></div>
+  </div>
+
+  <div class="tally">
+    <span>今天结了 <i></i> 件</span>
+    <span>改到明天 <i></i> 件</span>
+    <span>认赔 <i></i> 件</span>
+  </div>
+
+  <div class="focus">明天最想办的一件：<u></u></div>
+
+  <div class="foot"><span>记 · 划 · 结 · 稽</span><span></span></div>
+</section>
+
+<!-- ============ 页 2 ============ -->
+<section class="page p2">
+  <h2>这是什么，为什么给你一张纸</h2>
+
+  <p>
+    这不是「待办清单」。清单问的是<em>你还有多少事没做</em>；这张纸问的是<em>你这一天到底怎么过的</em>。
+    差别在最后一栏：<b>认赔</b>。
+  </p>
+  <p>
+    一件事你决定不做了，如实记一笔「认赔」，它就了结了——不算完成，也不再欠着。
+    删掉是掩盖，认赔是了结，这是两者的分界线。
+  </p>
+  <p>
+    软件还在做，而且只有 Mac 版。但这件事跟平台无关：
+    <b>如果一张纸你都不愿意填，装上软件也不会填。</b>
+    所以先给你纸。三天，一天一张。
+  </p>
+
+  <div class="rule">
+    <strong>怎么用，只有四步：</strong><br>
+    早上写几件今天真要办的（不用多，三件就够）→ 办完就打勾 →
+    睡前把底下三个数填了 → 写明天最想办的一件。<br>
+    <strong>当天没填就不要补。</strong>空着的那天本身就是一条信息。
+  </div>
+
+  <h2 style="margin-top:9mm">三天之后，回答三个问题</h2>
+
+  <ol>
+    <li>
+      <b>这三天里，有哪天你根本没填？</b>
+      <small>那天发生了什么——太忙、忘了、还是不想面对它？只要一句实话。</small>
+    </li>
+    <li>
+      <b>「认赔」那一栏，你填过数字吗？</b>
+      <small>填了，写下当时的感觉；一直是 0，也说一声「没填」。两个答案一样有用。</small>
+    </li>
+    <li>
+      <b>明天不给你这张纸，你会想它吗？</b>
+      <small>会 / 不会 / 看情况。再补一句为什么。</small>
+    </li>
+  </ol>
+
+  <p style="margin-top:8mm; color:#6b6b70; font-size:12px">
+    答案直接微信发我，一句话就行，不用写长。写长了我反而不容易看出重点。
+  </p>
+
+  <div class="foot"><span>浮窗待办 · 纸笔版</span><span>v1.2</span></div>
+</section>
+
+</body>
+</html>
