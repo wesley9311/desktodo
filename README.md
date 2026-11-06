@@ -1,4 +1,4 @@
-# 浮窗待办
+# 浮窗待办（DeskTodo）
 
 **[⬇ 下载最新版](https://github.com/wesley9311/desktodo/releases/latest)** · macOS 12+ · 约 1.2 MB · 不用装 Xcode
 
