@@ -59,6 +59,8 @@ jobs:
 
       - name: swiftc 全量编译
         run: |
+          # build/ 是产物目录、不入库，所以新克隆里没有它（第一版 CI 就栽在这）
+          mkdir -p build
           swiftc -O -whole-module-optimization \
             -target "$(uname -m)-apple-macos12.0" \
             -o build/DeskTodo-ci \
