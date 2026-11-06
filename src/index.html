@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>浮窗待办</title>
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+<div class="wrap" id="wrap">
+  <header id="dragbar">
+    <div class="clock">
+      <div class="clock-main"><span id="hhmm">--:--</span><span class="ss" id="ss">00</span></div>
+      <div class="clock-sub" id="sub">浮窗待办</div>
+    </div>
+    <div class="hb">
+      <button class="wx off" id="wx" title="天气">
+        <span class="wx-i" id="wxIcon">☀️</span><span class="wx-t" id="wxTemp"></span>
+      </button>
+      <button class="prog" id="btnProg" title="今日进度">
+        <svg class="ring" viewBox="0 0 22 22" aria-hidden="true">
+          <circle class="ring-bg" cx="11" cy="11" r="8.6"></circle>
+          <circle class="ring-fg" id="ringFg" cx="11" cy="11" r="8.6"></circle>
+        </svg>
+        <span class="prog-n" id="progN">0/0</span>
+      </button>
+    </div>
+    <div class="head-actions">
+      <button class="icon" id="btnCollapse" title="收起为紧凑日程 / 展开完整清单"><span class="chev"><svg width="12" height="12" viewBox="0 0 12 12"><path d="M2.5 7.4 6 3.9l3.5 3.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></span></button>
+      <button class="icon" id="btnMore" title="更多菜单"><svg width="14" height="14" viewBox="0 0 14 14"><circle cx="3" cy="7" r="1.15" fill="currentColor"/><circle cx="7" cy="7" r="1.15" fill="currentColor"/><circle cx="11" cy="7" r="1.15" fill="currentColor"/></svg></button>
+    </div>
+  </header>
+
+  <div class="anniv" id="anniv">
+    <span class="an-ic">🎞</span>
+    <div class="an-tx"><b id="annivTitle">年轮</b><span class="an-sub" id="annivSub"></span></div>
+    <button class="an-go" id="annivGo">看</button>
+    <button class="an-x" id="annivX" title="今年不再提示">✕</button>
+  </div>
+
+  <!-- 数据出过问题时才出现：读出来了就一行都不占。
+       "文件坏了但你不知道"和"数据丢了"对用户是同一件事，所以它必须可见。 -->
+  <div class="databar" id="databar">
+    <span class="db-ic">!</span>
+    <div class="db-tx" id="dbText"></div>
+    <button class="db-go" id="dbGo">看文件</button>
+    <button class="db-x" id="dbX" title="这次先不看">✕</button>
+  </div>
+
+  <div class="agenda" id="agenda"></div>
+
+  <div class="report" id="report"></div>
+
+  <div class="targetbar" id="targetbar">
+    <span class="tg-t" id="tgText"></span>
+    <button class="tg-x" id="tgClear" title="取消，恢复加到顶层">✕</button>
+  </div>
+
+  <div class="composer">
+    <input id="input" type="text" maxlength="90" placeholder="写一件要办的事，回车添加" />
+    <button class="add" id="btnAdd" title="新建">+</button>
+  </div>
+
+  <div class="banner" id="banner">
+    <span class="bz">⏰</span><span class="bt" id="bannerText"></span>
+  </div>
+
+  <ul class="list" id="list"></ul>
+
+  <footer id="footer">
+    <span id="summary">还没有任务</span>
+    <button id="btnClear" title="清除已勾选完成的任务">一键清除</button>
+  </footer>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<div class="drawer" id="drawer"></div>
+<div class="popmenu" id="popmenu"></div>
+
+<div class="grip t" data-edge="t"></div>
+<div class="grip l" data-edge="l"></div>
+<div class="grip r" data-edge="r"></div>
+<div class="grip b" data-edge="b"></div>
+<div class="grip br" data-edge="br"></div>
+<div class="grip bl" data-edge="bl"></div>
+
+<script src="app.js"></script>
+</body>
+</html>
