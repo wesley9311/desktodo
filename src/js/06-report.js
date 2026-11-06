@@ -228,7 +228,7 @@
   /* 被往后推了 N 天以上、现在还没做完的。
      【坑】不能用 due 判：rollover() 每晚把没做完的 due 改写成今天，
      due <= 七天前 永远不成立，这句话永远说不出来（等于永远在骗自己"没有积压"）。
-     真正记着拖延的是 carried（跨夜顺延时累加）。 */
+     真正记着拖延的是 carried（过夜自动继承、手动顺延都累加）。 */
   function staleCount(days) {
     var n = 0;
     state.nodes.forEach(function (x) {

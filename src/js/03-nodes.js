@@ -50,7 +50,7 @@
       var cd = document.createElement('button');
       cd.className = 'carry';
       cd.textContent = ((t.carried > 99) ? '99+' : t.carried) + '天';
-      cd.title = '这件已经在清单上放了 ' + t.carried + ' 天\n点开看欠账：可以放回今天，也可以销账';
+      cd.title = '从到期那天算起，这件已经往后放了 ' + t.carried + ' 天\n点开看欠账：可以放回今天，也可以销账';
       cd.addEventListener('click', function (e) {
         e.stopPropagation();
         openDebts();
@@ -65,13 +65,10 @@
       dt.title = '排在' + agendaLabel(t.due) + '\n点一下再往后挪一天';
       dt.addEventListener('click', function (e) {
         e.stopPropagation();
-        var d = new Date(t.due);
-        d.setDate(d.getDate() + 1);
-        t.due = dayStart(d.getTime());
-        t.moved = true;
+        var nd = pushDue(t, 1);
         persist();
         render();
-        toast('已顺延到 ' + agendaShort(t.due));
+        toast('已顺延到 ' + agendaShort(nd));
       });
       li.appendChild(dt);
     }

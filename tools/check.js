@@ -325,6 +325,71 @@ const caseStreak = makePage('__t_streak.html', {
   ok('半年页也标了"≥"', txt().indexOf('≥') >= 0, txt().slice(0, 200));`
 });
 
+/* ---------------- 用例 P：手动顺延也要记账 ----------------
+   老实现里「→」只写 due、不碰 carried，于是它成了一无限次免罚券：
+   每天早上点一下，一件东西能在清单上躺一年，欠账面板里永远 0 件。
+   同一件事，过夜自动继承要记一笔、手动往后放就免账 ——
+   那这个账本记的不是"我做了什么"，而是"我用哪个按钮做的"。 */
+const casePush = makePage('__t_push.html', {
+  load: {
+    nodes: [
+      { id: 1, type: 'task', text: '推到明天的那件', done: false, due: T0, created: T0 - 86400000, carried: 0 },
+      { id: 2, type: 'task', text: '排在明天的那件', done: false, due: T0 + 86400000, created: T0, carried: 0 }
+    ],
+    seq: 3, log: [], daily: {},
+    flow: {}, byProj: {}, anniv: {}, fb: [], hide: {}, gap: {}, gapOff: 0,
+    said: {}, saidN: {}, vote: {}, seen: { [dayKeyOf(T0)]: 1 }, seenFrom: dayKeyOf(T0)
+  },
+  ext: null,
+  body: `
+  function nodeOf(id) {
+    var a = window.__debugState().nodes.filter(function (n) { return n.id === id; });
+    return a[0] || {};
+  }
+  function moveOf(word) {
+    var rows = [].slice.call(document.querySelectorAll('.agenda .a-row'));
+    for (var i = 0; i < rows.length; i++) {
+      if (rows[i].textContent.indexOf(word) >= 0) return rows[i].querySelector('.a-move');
+    }
+    return null;
+  }
+  function chipOf(word) {
+    var rows = [].slice.call(document.querySelectorAll('#list li'));
+    for (var i = 0; i < rows.length; i++) {
+      if (rows[i].textContent.indexOf(word) >= 0) return rows[i].querySelector('.chip.day');
+    }
+    return null;
+  }
+  function debtText() {
+    var d = document.querySelector('.a-debt');
+    return d ? d.textContent : '没有';
+  }
+
+  // 1) 收起态：今天的活点「→」推走
+  window.__setCollapsed(true);
+  ok('收起态能看到今天清单', !!moveOf('推到明天'), debtText());
+  ok('顺延前没有欠账条', !document.querySelector('.a-debt'), debtText());
+  var m1 = moveOf('推到明天');
+  if (m1) m1.click();
+  ok('点「→」记 1 天', nodeOf(1).carried === 1, 'carried=' + nodeOf(1).carried);
+  ok('点「→」due 真到了明天', nodeOf(1).due === ${T0} + 86400000, 'due=' + nodeOf(1).due);
+  ok('只推一天还不算欠（阈值 2）', !document.querySelector('.a-debt'), debtText());
+
+  // 2) 展开态：未来任务的日期 chip 走同一条路
+  window.__setCollapsed(false);
+  var c1 = chipOf('排在明天');
+  ok('未来任务有日期 chip', !!c1);
+  if (c1) c1.click();
+  ok('点日期 chip 也记 1 天', nodeOf(2).carried === 1, 'carried=' + nodeOf(2).carried);
+  var c2 = chipOf('排在明天');
+  if (c2) c2.click();
+  ok('连推两次记到 2 天', nodeOf(2).carried === 2, 'carried=' + nodeOf(2).carried);
+  ok('推过两次后欠账条出现', !!document.querySelector('.a-debt'), debtText());
+  // 只该有 1 件进欠账：另一件只推了一次
+  ok('另一件没被算进来', debtText().indexOf('有 1 件') >= 0, debtText());
+  `
+});
+
 /* ---------------- 用例 6：没记录 ≠ 0 件 ---------------- */
 const caseSeen = makePage('__t_seen.html', {
   load: {
@@ -537,7 +602,8 @@ const caseLedger = makePage('__t_ledger.html', {
 let bad = 0;
 for (const [name, file] of [['三层纠错', caseTruth], ['授权状态', casePerm], ['页签渲染', caseTabs],
   ['欠账与日结', caseDebt], ['本周页签', caseWeek], ['开着但没勾', caseWeekZero],
-  ['连续是下界', caseStreak], ['观测口径', caseSeen], ['积压与占比', caseBacklog],
+  ['连续是下界', caseStreak], ['手动顺延记账', casePush],
+  ['观测口径', caseSeen], ['积压与占比', caseBacklog],
   ['口径一致', caseCaliber], ['导出与状态', caseExport], ['账本自洽', caseLedger]]) {
   const out = run(file);
   const fails = (out.match(/^FAIL /gm) || []).length;

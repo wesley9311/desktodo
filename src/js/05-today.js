@@ -231,8 +231,10 @@
     return { done: done, pending: pending, total: done + pending, carried: carried };
   }
 
-  /* 欠账：拖着没做完、已经顺延 2 天以上的，按拖得最久的排前面。
+  /* 欠账：拖着没做完、已经往后放 2 天以上的，按放得最久的排前面。
      只读 carried —— 这个数从第一天就在记，缺的从来不是数据，是出口。
+     它同时来自两条路径：过夜自动继承，以及手动点「→」顺延。
+     只认前者的话，「→」就成了免罚券，欠账能被手动点干净。
      不新算任何衍生指标：这里列出来的每一件，用户都能自己数一遍对上。 */
   function debts() {
     return state.nodes.filter(function (n) {

@@ -8,6 +8,25 @@
   }
   function todayStart() { return dayStart(Date.now()); }
 
+  /* 手动顺延。以前这里只写 `t.due = 明天`，不动 carried ——
+     后果是「→」变成一张无限次免罚券：每天早上点一下，一件东西能在清单上躺一年，
+     欠账面板里永远是 0 件，徽标永远不出现。同一件事，过夜自动继承要计账，
+     手动往后放就免账，那这个账本记的不是我做了什么，而是我用哪个按钮做的。
+
+     carried 的含义从此统一为：这件东西从到期日算起，被往后放了多少天。
+     自动继承和手动顺延是产生积压的两条路径，不是两种待遇。 */
+  function pushDue(t, days) {
+    var step = days || 1;
+    var base = (typeof t.due === 'number' && isFinite(t.due)) ? t.due : todayStart();
+    var d = new Date(base);
+    d.setDate(d.getDate() + step);
+    t.due = dayStart(d.getTime());
+    // 位移几天就记几天（同一天连点两次「→」是推了 2 天，不是推了 1 次）。
+    // 上界和 rollover 里那条一致，不允许手动路径绕过 366。
+    t.carried = Math.min((t.carried || 0) + step, 366);
+    return t.due;
+  }
+
   function rollover() {
     var t0 = todayStart(), changed = false;
     state.nodes.forEach(function (n) {
@@ -153,7 +172,7 @@
       var b = document.createElement('span');
       b.className = 'a-badge';
       b.textContent = '顺延' + t.carried + '天';
-      b.title = '这件已经在清单上放了 ' + t.carried + ' 天';
+      b.title = '从到期那天算起，这件已经往后放了 ' + t.carried + ' 天';
       row.appendChild(b);
     }
 
@@ -166,14 +185,11 @@
     })();
     mv.addEventListener('click', function (e) {
       e.stopPropagation();
-      var d = new Date(t.due || todayStart());
-      d.setDate(d.getDate() + 1);
-      t.due = dayStart(d.getTime());
-      t.moved = true;
+      var nd = pushDue(t, 1);
       persist();
       render();
       renderAgenda();
-      agendaFlash('已顺延到 ' + agendaShort(t.due));
+      agendaFlash('已顺延到 ' + agendaShort(nd));
     });
     row.appendChild(mv);
 
@@ -244,7 +260,7 @@
       var n = document.createElement('span');
       n.className = 'd-n';
       n.textContent = (t.carried || 0) + '天';
-      n.title = '这件已经在清单上放了 ' + (t.carried || 0) + ' 天';
+      n.title = '从到期那天算起，这件已经往后放了 ' + (t.carried || 0) + ' 天';
 
       var tx = document.createElement('span');
       tx.className = 'd-t';
