@@ -1,0 +1,52 @@
+name: 提一个需求
+description: 先说处境，再说方案
+labels: ["idea"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        这个产品只做一件事：**一天一页，记 / 划 / 结 / 稽。**
+        [docs/POSITIONING.md](https://github.com/wesley9311/desktodo/blob/main/docs/POSITIONING.md)
+        里写了新功能的准入标准——先看它，能省你一段解释。
+
+        提需求时最容易漏、但最有用的一句是：**没有它的时候，你是怎么过的。**
+
+  - type: textarea
+    id: scene
+    attributes:
+      label: 你现在怎么过的
+      description: |
+        别说"加个标签就好了"。说说没有它的时候，你在这件具体的事上卡在哪、
+        用了什么替代办法、那个办法哪里难受。
+    validations:
+      required: true
+
+  - type: dropdown
+    id: which
+    attributes:
+      label: 它属于哪个动作
+      description: 归不进任何一个的话，多半是另一个产品的功能。
+      options:
+        - 记（写下来）
+        - 划（做完、退账）
+        - 结（日结、欠账）
+        - 稽（报告、口径）
+        - 归不进去——我想的是别的产品
+    validations:
+      required: true
+
+  - type: textarea
+    id: idea
+    attributes:
+      label: 你想让它怎么做
+      description: 可以只写结论，但请写清它在哪个位置出现、什么时候出现。
+
+  - type: checkboxes
+    id: boundary
+    attributes:
+      label: 先自查两条
+      options:
+        - label: 它不需要联网、不需要账号
+          required: true
+        - label: 它不会让这个账本变得更容易被"美化"（补记、断连惩罚、排行榜这类）
+          required: true

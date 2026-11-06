@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 安全漏洞 / 隐私问题
+    url: https://github.com/wesley9311/desktodo/security/policy
+    about: 别公开提 issue。威胁模型和"它不防什么"也在那里。
+  - name: 它有哪些已知问题
+    url: https://github.com/wesley9311/desktodo/blob/main/docs/audits/2026-11-06.md
+    about: 提之前先扫一眼，可能已经在"未修清单"里了。
