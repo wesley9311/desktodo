@@ -77,6 +77,13 @@ extension AppDelegate {
         }
         do {
             try json.write(to: url, atomically: true, encoding: .utf8)
+            /* 同机别的账户不该读得到「你在欠自己什么」。
+               atomic 写入是新建文件，权限会回到 644，所以每次写完重设一遍。
+               备份是同一份数据，一起收紧；失败不阻断保存——权限比数据本身次要。 */
+            try? fm.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
+            if fm.fileExists(atPath: bak.path) {
+                try? fm.setAttributes([.posixPermissions: 0o600], ofItemAtPath: bak.path)
+            }
             return true
         } catch {
             NSLog("DeskTodo save: 写盘失败 \(error.localizedDescription)")

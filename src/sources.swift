@@ -490,6 +490,9 @@ final class FocusTracker {
         guard let data = try? JSONSerialization.data(withJSONObject: days) else { return }
         do {
             try data.write(to: url, options: .atomic)
+            // 前台 App 名也属于"这台机器上你在干什么"，同机别的账户不该读得到
+            try? FileManager.default.setAttributes([.posixPermissions: 0o600],
+                                                   ofItemAtPath: url.path)
             dirty = false
         } catch {
             // 写失败保持 dirty，下一拍还会再试；不再"装作存住了"
