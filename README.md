@@ -8,8 +8,15 @@
 年底能翻回来看这一年到底做了多少、哪天在做、哪天没有。
 
 **说到底是本日账本，不是任务管理器**：待办软件问你"还有什么没做"，它问你"欠了自己多少"。
-不排项目，不协作，不同步。定位、模块取舍、以及"什么功能不该加"的判断标准，见
-[docs/POSITIONING.md](docs/POSITIONING.md)。
+不排项目，不协作，不同步。
+
+> **第一次用，看 [`docs/MANUAL.md`](docs/MANUAL.md)** —— 界面上每一处、每个菜单项、
+> 每种出错情况都在里面，按屏幕位置写的。
+> 要改代码，看 [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md)。
+> 想知道它有哪些已知问题，看 [`docs/AUDIT-2026-11-06.md`](docs/AUDIT-2026-11-06.md)。
+>
+> 定位、模块取舍、以及"什么功能不该加"的判断标准，见
+> [docs/POSITIONING.md](docs/POSITIONING.md)。
 
 ```
 ┌─────────────────────────────┐
@@ -110,13 +117,17 @@ cd desk-todo
 ## 代码结构
 
 ```
-src/*.swift              原生壳（约 3300 行）：窗口、圆点、菜单、桥、数据源
-src/js/01..10-*.js       页面（约 4700 行），按职责分片，构建时拼成单个 IIFE
-src/styles.css           样式
+src/*.swift              原生壳（3269 行 / 15 个文件）：窗口、圆点、菜单、桥、数据源
+src/js/01..10-*.js       页面（3789 行 / 10 个分片），按职责分片，构建时拼成单个 IIFE
+src/styles.css           样式（924 行）
 tools/bundle.sh          分片 → 单文件（WKWebView 用 file://，不能用 ES module）
-tools/audit.sh           边界审计：网络出口 / 反遥测 / 权限面 / 数据不入库 / 口径唯一
-tools/check.js           99 条行为断言（headless Chrome）
+tools/audit.sh           边界审计六类：网络出口 / 反遥测 / 权限面 / 数据不入库 / 可移植性 / 口径唯一
+tools/check.js           110 条行为断言（headless Chrome，10 个用例）
 tools/dist.sh            打体验版分发包（ad-hoc 签名，谁都能跑）
+
+docs/MANUAL.md           操作手册：界面上每一处、每个菜单项、每种异常怎么办
+docs/DEVELOPMENT.md      开发文档：架构、桥协议、数据格式、口径、构建、发版、文档规范
+docs/AUDIT-2026-11-06.md 对抗性诊断：找到什么、修了什么、没修的为什么
 docs/PRODUCT-BOUNDARY.md 边界、职责分配、可加/不可加、状态机
 docs/POSITIONING.md      定位：为什么是账本不是清单，什么功能不该加
 ```

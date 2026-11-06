@@ -417,10 +417,85 @@ const caseExport = makePage('__t_export.html', {
   ok('诊断写明不含内容', diag.indexOf('不含任何任务内容') >= 0);`
 });
 
+/* ---------------- 用例 L：账本自洽 ----------------
+   这四条都不是"界面不好看"，是**账目自己会变错**，而且用户看不见错在哪：
+   1 取消勾选一件超过 60 天前完成的任务，daily 以前不会减回来 → 永久多记一件
+   2 顺延天数累加上界写 999、重算上界写 366 → 数字会自己从 999 变 366
+   3 认赔（q）不算"这天我看得见" → seen 被裁之后那一天退回"不知道"
+   4 报告五个页签高度差 500px，切一次页签整个窗口弹一次
+   这几条以前 99 条断言全绿也照样存在，因为断言没查它们。 */
+const MID0 = (function () { const d = new Date(); d.setHours(0, 0, 0, 0); return d.getTime(); })();
+const keyOfTs = function (ts) {
+  const d = new Date(ts);
+  return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate());
+};
+// 60 天前正午完成：一定已经被 pruneLog 裁掉（它只留 60 天，且按 todayStart 算）
+const SIXTY_TS = (function () { const d = new Date(); d.setDate(d.getDate() - 60); d.setHours(12, 0, 0, 0); return d.getTime(); })();
+const SIXTY_K = keyOfTs(SIXTY_TS);
+// 只有一次销账的那天：daily 没有、seen 没有、只有 flow.q
+const QONLY_TS = (function () { const d = new Date(); d.setDate(d.getDate() - 3); d.setHours(0, 0, 0, 0); return d.getTime(); })();
+const QONLY_K = keyOfTs(QONLY_TS);
+const QONLY_MD = (new Date(QONLY_TS).getMonth() + 1) + '/' + new Date(QONLY_TS).getDate();
+
+const caseLedger = makePage('__t_ledger.html', {
+  load: {
+    nodes: [
+      { id: 1, type: 'task', text: '六十天前做完的', done: true, doneAt: SIXTY_TS, due: MID0, created: SIXTY_TS - 86400000 },
+      { id: 2, type: 'task', text: '拖了很久的', done: false, due: MID0, carried: 900, created: MID0 - 400 * 86400000 }
+    ],
+    seq: 3,
+    log: [],                                  // 明细已裁，这里必须是空的，才是真实场景
+    daily: {},                                // 下面按计算出的键填，避免硬编码日期
+    seen: {}, seenFrom: '',
+    flow: {},
+    byProj: {}, anniv: {}, fb: [], hide: {}, gap: {}, gapOff: 0,
+    said: {}, saidN: {}, vote: {}
+  },
+  ext: null,
+  body: `
+  var st0 = window.__debugState();
+  // 把夹具铺好：那天的账是 1 件，而 log 里没有对应明细
+  st0.daily['${SIXTY_K}'] = 1;
+  st0.flow['${QONLY_K}'] = { q: 1 };
+  ok('起点：那天的账是 1', st0.daily['${SIXTY_K}'] === 1);
+
+  // 1) 明细已裁时取消勾选，账要退回来
+  var row = document.querySelector('.task[data-id="1"] .check');
+  ok('找得到那条已完成任务的勾选框', !!row);
+  if (row) row.click();
+  var st1 = window.__debugState();
+  ok('取消勾选后那天减回 0（明细已裁也要退）', !st1.daily['${SIXTY_K}'],
+    'daily=' + JSON.stringify(st1.daily));
+  ok('任务本身回到未完成', st1.nodes.filter(function (n) { return n.id === 1; })[0].done === false);
+
+  // 2) 顺延天数：涨不上去，也不会自己变小
+  var long = st1.nodes.filter(function (n) { return n.id === 2; })[0];
+  ok('顺延天数不超过 366', (long.carried || 0) <= 366, 'carried=' + long.carried);
+  ok('没有出现 999 这种越界值', (long.carried || 0) !== 999 && (long.carried || 0) !== 900, 'carried=' + long.carried);
+
+  // 3) 只有认赔的那天，不算"没记录"
+  tab('yr');
+  var tips = Array.prototype.map.call(document.querySelectorAll('rect title'),
+    function (n) { return n.textContent; });
+  var qTip = tips.filter(function (x) { return x.indexOf('${QONLY_MD}') === 0; })[0] || '';
+  ok('销账的那天不进"没记录"', qTip.indexOf('没记录') < 0, 'tip=' + qTip);
+
+  // 4) 切页签：只会变高，不会缩回来再弹一下（窗口高度才稳）
+  tab('day');
+  var hDay = document.getElementById('report').offsetHeight;
+  tab('yr');
+  var hYr = document.getElementById('report').offsetHeight;
+  tab('day');
+  var hBack = document.getElementById('report').offsetHeight;
+  ok('切页签只会变高', hYr >= hDay && hDay > 0, hDay + ' → ' + hYr);
+  ok('切回原页签高度不变（不抖）', hBack === hYr, hYr + ' → ' + hBack);
+  ok('高度有上限，不会顶出屏幕', hYr <= 640, 'h=' + hYr);`
+});
+
 let bad = 0;
 for (const [name, file] of [['三层纠错', caseTruth], ['授权状态', casePerm], ['页签渲染', caseTabs],
   ['欠账与日结', caseDebt], ['本周页签', caseWeek], ['观测口径', caseSeen], ['积压与占比', caseBacklog],
-  ['口径一致', caseCaliber], ['导出与状态', caseExport]]) {
+  ['口径一致', caseCaliber], ['导出与状态', caseExport], ['账本自洽', caseLedger]]) {
   const out = run(file);
   const fails = (out.match(/^FAIL /gm) || []).length;
   const passes = (out.match(/^PASS /gm) || []).length;

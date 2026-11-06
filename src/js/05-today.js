@@ -143,16 +143,24 @@
   }
 
   function markUndone(t) {
+    /* 取消勾选要把当初记上的那一笔从账本里退回来。
+       坑：log 只留 60 天（pruneLog），60 天前完成的任务在这里已经找不到明细。
+       以前找不到就什么都不做——daily 永久多记一件，而且没有任何地方能看出错在哪。
+       兜底：doneAt 一直挂在任务对象上，用它把那一笔退回。
+       代价是 60 天前的"取消勾选"只能退到天，退不到秒（log 里有秒，这里没有）。 */
+    var wasAt = t.doneAt;
     t.done = false;
     delete t.doneAt;
-    var log = logArray();
+
+    var log = logArray(), hit = -1;
     for (var i = log.length - 1; i >= 0; i--) {
-      if (log[i].id === t.id) {
-        bumpDay(log[i].at, -1);
-        bumpProj(t, -1, log[i].at);
-        log.splice(i, 1);
-        break;
-      }
+      if (log[i].id === t.id) { hit = i; break; }
+    }
+    var at = hit >= 0 ? log[hit].at : (typeof wasAt === 'number' ? wasAt : 0);
+    if (hit >= 0) log.splice(hit, 1);
+    if (at) {
+      bumpDay(at, -1);
+      bumpProj(t, -1, at);
     }
   }
 
@@ -170,7 +178,10 @@
     if (dayDone(day) > 0) return true;
     if (daySeen(day)) return true;
     var f = (state.flow || {})[dayKey(day)];
-    return !!(f && ((f.n || 0) + (f.x || 0) > 0));
+    /* 三样操作都算证据：新建(n)、删掉没做完的(x)、认赔(q)。
+       q 是 1.3.0 才加的，这里以前只数 n+x——销账那天明明有动作，
+       却在 seen 被裁掉之后变回"不知道"。口径只加不减，所以把 q 并进来。 */
+    return !!(f && ((f.n || 0) + (f.x || 0) + (f.q || 0) > 0));
   }
 
   /* 打开就盖一个戳：只记"这天 app 开着"，不记任何内容。

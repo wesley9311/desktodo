@@ -120,7 +120,10 @@
         persist();
         if (box.parentNode) box.parentNode.removeChild(box);
         renderReport();          // 统计行要跟着变
-        toast('记下了 · 这数我不改（改了就成假账），但这行以后会被我记得不牢');
+        /* 这里不许承诺"以后会记得不牢"——fb 只存下来给用户自己看，
+           没有任何代码会因为它改变输出。能改行为的只有月级投票（saidN）。
+           说了做不到，比不说更糟。 */
+        toast('记下了 · 这个数我不改（改了就成假账）。年轮里那句判断，你可以在下面投「不准」');
       } else if (box.parentNode) {
         box.parentNode.removeChild(box);
       }
@@ -320,6 +323,27 @@
     return '<div class="r-quote">「' + q[0] + '」 <b>—— ' + q[1] + '</b></div>';
   }
 
+  /* 报告卡的"只增不减"高度锁。
+     五个页签的内容高度从 200px 到 700px，高度跟着内容走的话，
+     切一次页签整个窗口就弹一下——读数字的时候眼睛在抖，还会把窗口推到屏幕外。
+     做法：打开报告时按当前页签定一个高度，之后切页签只可能更高，不会缩回来。
+     切回短页签会留白，但窗口不动；宁可一次留白，也不要每次切都跳。 */
+  var reportLockH = 0;
+  var REPORT_MAX_H = 640;
+
+  function lockReportHeight(force) {
+    if (!el.report) return;
+    if (force) {
+      reportLockH = 0;
+      el.report.style.height = '';
+    }
+    var natural = el.report.scrollHeight;
+    if (!natural) return;
+    reportLockH = reportLockH ? Math.max(reportLockH, natural) : natural;
+    var h = Math.min(reportLockH, REPORT_MAX_H);
+    el.report.style.height = h + 'px';
+  }
+
   function renderReport() {
     if (!el.report || !reportOpen) return;
     var st = statsToday();
@@ -412,12 +436,19 @@
     }
 
     el.report.innerHTML = head + body;
+    lockReportHeight();
   }
 
   function toggleReport(force) {
     reportOpen = (typeof force === 'boolean') ? force : !reportOpen;
     el.report.classList.toggle('show', reportOpen);
-    if (reportOpen) renderReport();
+    if (reportOpen) {
+      lockReportHeight(true);    // 每次重新打开都按当前页签重新定高，不留上次的留白
+      renderReport();
+    } else {
+      reportLockH = 0;
+      el.report.style.height = '';
+    }
     lastHeight = 0;
     setTimeout(scheduleResize, 0);
     setTimeout(scheduleResize, 240);
