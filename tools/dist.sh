@@ -18,7 +18,9 @@ APP="$STAGE/$APPNAME.app"
 OUTDIR="$ROOT/dist"
 
 VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$SRC/Info.plist")"
-ZIP="$OUTDIR/$APPNAME-体验版-$VERSION.zip"
+# 文件名用 ASCII：GitHub 上传附件时会把中文名整个换成连字符，
+# 变成 "-.-1.1.1.zip" 这种谁也不敢下的东西。zip 里面的文件名照旧是中文。
+ZIP="$OUTDIR/DeskTodo-$VERSION.zip"
 
 echo "==> 清理"
 rm -rf "$STAGE"
