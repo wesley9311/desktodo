@@ -44,6 +44,20 @@
       li.appendChild(title);
     }
 
+    if (!t.done && (t.carried || 0) >= 2 && editingId !== t.id) {
+      /* 拖了几天，在每天都会看的那张清单上得看得见。
+         以前这个数只有收起态（小圆点）和日程视图里有，而那两个地方日常根本不去。 */
+      var cd = document.createElement('button');
+      cd.className = 'carry';
+      cd.textContent = ((t.carried > 99) ? '99+' : t.carried) + '天';
+      cd.title = '这件已经在清单上放了 ' + t.carried + ' 天\n点开看欠账：可以放回今天，也可以销账';
+      cd.addEventListener('click', function (e) {
+        e.stopPropagation();
+        openDebts();
+      });
+      li.appendChild(cd);
+    }
+
     if (!t.done && t.due && t.due > todayStart()) {
       var dt = document.createElement('button');
       dt.className = 'chip day';
@@ -491,10 +505,16 @@
     return t;
   }
 
-  function removeNode(id) {
+  /* why = 'writeoff' 是用户主动认赔（销账）；其余都是普通删除。
+     这两件事以前合成一笔「删掉」，于是一个人的"我认下了这件事不做了"
+     和"这条我不想要了"看起来一模一样——账本允许认赔，但认赔的人自己看不见。
+     口径只加不减：老的 x 不重算、不反推，q 从这一版开始单独记。 */
+  function removeNode(id, why) {
     var gone = byId(id);
     // 只有"删掉一件没做完的"才算放弃；删已完成的只是清理，不该记成放弃
-    if (gone && gone.type === 'task' && !gone.done) bumpFlow('x', 1);
+    if (gone && gone.type === 'task' && !gone.done) {
+      bumpFlow(why === 'writeoff' ? 'q' : 'x', 1);
+    }
     state.nodes = state.nodes.filter(function (n) { return n.id !== id; });
     if (drawerId === id) { drawerId = null; el.drawer.classList.remove('show'); el.drawer.innerHTML = ''; }
     if (targetProject === id) targetProject = null;

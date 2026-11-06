@@ -200,15 +200,17 @@
   /* 当年新增 / 删掉（没做完的）。days 是"有记账动作的天数"——
      这一层是后加的，老账本里没有，没记过就别硬算成 0，那会读成"一件没写"。 */
   function yearFlow(year) {
-    var nw = 0, dr = 0, days = 0, f = flowMap(), pre = String(year) + '-';
+    var nw = 0, dr = 0, days = 0, wr = 0, anyQ = false, f = flowMap(), pre = String(year) + '-';
     Object.keys(f).forEach(function (k) {
       if (k.indexOf(pre) !== 0) return;
       var e = f[k] || {};
       nw += e.n || 0;
       dr += e.x || 0;
+      // q = 销账（认赔）。老账本里没有这一层，所以有 q 才敢说"认赔几件"
+      if (typeof e.q === 'number') { wr += e.q; anyQ = true; }
       days++;
     });
-    return { nw: nw, dr: dr, days: days };
+    return { nw: nw, dr: dr, days: days, wr: wr, anyQ: anyQ };
   }
 
   /* 被往后推了 N 天以上、现在还没做完的。
@@ -284,6 +286,11 @@
     var html = '<div class="r-flow">';
     html += '<span title="今年新写进清单的件数">新写 <b>' + fl.nw + '</b></span>';
     html += '<span title="今年删掉、且当时没做完的件数">删掉 <b>' + fl.dr + '</b></span>';
+    // 认赔是另一件事：删掉是"不想要了"，认赔是"我认下这件事不做了"。
+    // 两者混成一个数，那笔了结就没有重量了。
+    if (fl.anyQ) {
+      html += '<span title="今年主动认下不做了的件数（销账）。不算完成，也不再欠着">认赔 <b>' + fl.wr + '</b></span>';
+    }
     if (net > 0) {
       html += '<span title="做完的比新写的多 ' + net + ' 件，在清旧账">多做 <b>' + net + '</b></span>';
     } else if (net < 0) {

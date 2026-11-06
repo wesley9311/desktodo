@@ -57,7 +57,7 @@
     var m = flowMap(), k = dayKey(Date.now());
     var e = m[k] || { n: 0, x: 0 };
     e[kind] = Math.max(0, (e[kind] || 0) + delta);
-    if (!e.n && !e.x) delete m[k]; else m[k] = e;
+    if (!e.n && !e.x && !e.q) delete m[k]; else m[k] = e;
   }
 
   /* 某一天新增了几件待办（老数据没有这一层，返回 0，不猜） */

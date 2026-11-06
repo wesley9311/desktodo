@@ -143,6 +143,7 @@
     state.vote = (data && data.vote && typeof data.vote === 'object') ? data.vote : {};
     state.seen = (data && data.seen && typeof data.seen === 'object') ? data.seen : {};
     state.seenFrom = (data && typeof data.seenFrom === 'string') ? data.seenFrom : '';
+    state.settle = (data && typeof data.settle === 'string') ? data.settle : '';
     if (rollover()) persist();   // 跨夜：没做完的自动继承到今天
     render();
     tickClock();

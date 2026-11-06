@@ -85,7 +85,8 @@
 
   var agendaNoteTimer = null;
   function agendaFlash(text) {
-    var m = el.agenda && el.agenda.querySelector('.a-meta');
+    // 展开态看不见 .a-meta（那条被 CSS 藏了），别把话写进一个看不见的地方
+    var m = (document.body.classList.contains('collapsed')) && el.agenda && el.agenda.querySelector('.a-meta');
     if (!m) { toast(text); return; }
     clearTimeout(agendaNoteTimer);
     m.textContent = text;
@@ -180,7 +181,11 @@
      不报「昨天欠了几件」：历史上的未完成数没法从 data.json 可靠重建
      （任务会被删、会被顺延、会被销账），编一个看起来像真的数，比不报恶劣得多。
      今天欠多少，在下面的「欠账」里另算——那是还活着的任务，不是历史。 */
-  var settleShown = '';   // 已经给哪一天看过，一天里不反复出现
+  /* 「哪天已经给看过」存在 state.settle 里（会写盘）。
+     以前只是个内存变量，结果一天里关掉再打开三次，就刷三次。 */
+  function settleSeenToday() {
+    return state.settle === dayKey(Date.now());
+  }
 
   function settleText() {
     var y = prevDay(todayStart());
@@ -190,6 +195,15 @@
   }
 
   var debtOpen = false;
+
+  /* 从清单上的「N天」直接进欠账面板。
+     销账这件事有两个入口是必要的：一条总账（拖了 2 天以上有几件），
+     一条单件（这件拖了几天）。只有总账的话，看到单件的天数时没地方去。 */
+  function openDebts() {
+    if (!debts().length) { toast('没有拖过 2 天的'); return; }
+    debtOpen = true;
+    renderAgenda();
+  }
 
   function renderDebt(host) {
     var list = debts();
@@ -251,7 +265,7 @@
       wv.title = '记一笔放弃：不算完成，也不再欠着';
       wv.addEventListener('click', function (e) {
         e.stopPropagation();
-        removeNode(t.id);      // 内部按「删掉一件没做完的」记一笔 x，不新增口径
+        removeNode(t.id, 'writeoff');   // 认赔记一笔 q，跟"我不想要了"分开
         toast('已销账 · 不算完成');
       });
 
@@ -266,6 +280,22 @@
     note.className = 'd-note';
     note.textContent = '销账 = 认下这件不做了。不算完成，也不再欠着。';
     host.appendChild(note);
+  }
+
+  /* 展开态要的东西和收起态不一样。
+     收起态：日程是主体（日期、还剩几件、今天这几条）。
+     展开态：下面就是完整的清单，日期和"还剩 N 件"是重复的；
+            这里只该留「要你处理」的两条——日结、欠账。
+     都没有就把整块清空（CSS 里 .agenda:empty 不占位置）。 */
+  function trimForExpanded(host) {
+    if (!el.agenda || document.body.classList.contains('collapsed')) return;
+    var keep = host.querySelectorAll('.a-settle, .a-debt');
+    if (!keep.length) { host.innerHTML = ''; return; }
+    Array.prototype.slice.call(host.children).forEach(function (c) {
+      if (!c.classList.contains('a-settle') && !c.classList.contains('a-debt')) {
+        host.removeChild(c);
+      }
+    });
   }
 
   function renderAgenda() {
@@ -296,9 +326,9 @@
     head.appendChild(meta);
     host.appendChild(head);
 
-    // 日结：每天第一次打开露一次，点 ✕ 当天不再出现
+    // 日结：每天第一次打开露一次，看过就不再出现（标记写盘，重启也不重来）
     var settle = settleText();
-    if (settle && settleShown !== dayKey(Date.now())) {
+    if (settle && !settleSeenToday()) {
       var pend = statsToday().pending;
       var sb = document.createElement('div');
       sb.className = 'a-settle';
@@ -309,15 +339,17 @@
       var sx = document.createElement('button');
       sx.className = 'st-x';
       sx.textContent = '✕';
-      sx.title = '今天不再显示';
+      sx.title = '现在就收起来';
       sx.addEventListener('click', function (e) {
         e.stopPropagation();
-        settleShown = dayKey(Date.now());
         renderAgenda();
       });
       sb.appendChild(stx);
       sb.appendChild(sx);
       host.appendChild(sb);
+      // 出现即算看过：不点 ✕ 也算，否则关掉再开又会来一次
+      state.settle = dayKey(Date.now());
+      persist();
     }
 
     // 欠账入口：原来这里只有半句话，点不动也销不掉
@@ -344,6 +376,7 @@
         ? (doneToday ? '今日已完成 ' + doneToday + ' 件 · 明天见' : '这一天的都做完了 · 展开看全部')
         : '点箭头展开，写第一条待办';
       host.appendChild(em);
+      trimForExpanded(host);
       return;
     }
 
@@ -359,6 +392,7 @@
       });
       host.appendChild(more);
     }
+    trimForExpanded(host);
   }
 
   /* 时间段提醒的下一次触发：从 fromMs 之后找最近的 hh:mm，超过结束日就没有了。

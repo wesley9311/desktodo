@@ -14,10 +14,14 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 SRC="$ROOT/src"
 STAGE="$ROOT/build/dist"
 APPNAME="浮窗待办"
-APP="$STAGE/$APPNAME.app"
 OUTDIR="$ROOT/dist"
 
 VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$SRC/Info.plist")"
+# 顶层套一个文件夹：解压后必定是一坨完整的，不会四个文件散在"下载"里。
+# 名字带版本号，用户手里同时有两版时能分清哪个是新的。
+PKGNAME="$APPNAME-$VERSION"
+PKG="$STAGE/$PKGNAME"
+APP="$PKG/$APPNAME.app"
 # 文件名用 ASCII：GitHub 上传附件时会把中文名整个换成连字符，
 # 变成 "-.-1.1.1.zip" 这种谁也不敢下的东西。zip 里面的文件名照旧是中文。
 ZIP="$OUTDIR/DeskTodo-$VERSION.zip"
@@ -51,98 +55,191 @@ codesign --force --deep --sign - "$APP" 2>&1 | sed 's/^/    /' || {
 codesign --verify --deep --strict "$APP" && echo "    校验通过"
 
 # ---- 安装脚本 ----
-cat > "$STAGE/安装.command" <<'EOS'
+# 设计原则：任何一步失败都要停下来把话说清楚。
+# 用 set -e 的话，一出错 Terminal 窗口一闪就关，用户只看到"它闪了一下"，
+# 这是最容易让人放弃的失败方式——比报错本身更糟。
+cat > "$PKG/安装.command" <<'EOS'
 #!/bin/bash
-# 双击前请先：右键 →「打开」。（第一次会被系统拦一次，右键打开就绕过这一层。
-# 应用没有做苹果的开发者公证，原因写在 读我.txt 里。）
-set -e
-cd "$(dirname "$0")"
-SRC_APP="浮窗待办.app"
+# 双击前请先：右键 →「打开」。第一次一定会被系统拦一次，右键打开就绕过这一层。
+#
+# 这个脚本只做一件事：把同目录的 app 拷进 ~/Applications，然后打开它。
+# 你的记录不在这里，所以反复安装、换版本都不会动它。
+
+cd "$(dirname "$0")" || { echo "进不去脚本所在的文件夹"; read -n 1 -s; exit 1; }
+
+APPNAME="浮窗待办"
+SRC="$APPNAME.app"
 DEST_DIR="$HOME/Applications"
-DEST="$DEST_DIR/浮窗待办.app"
+DEST="$DEST_DIR/$SRC"
 
-echo "正在安装到 $DEST"
-mkdir -p "$DEST_DIR"
-
-if [ -d "$DEST" ]; then
-  echo "发现旧版本，先退出再替换（数据在 ~/Library/Application Support/DeskTodo，不会动）"
-  osascript -e 'tell application "浮窗待办" to quit' >/dev/null 2>&1 || true
-  sleep 1
-  rm -rf "$DEST"
-fi
-
-cp -R "$SRC_APP" "$DEST"
-# 去掉"从网络下载"的隔离标记，否则第一次启动会被 Gatekeeper 拦住
-xattr -dr com.apple.quarantine "$DEST" 2>/dev/null || true
-
-echo "装好了，正在打开。"
-echo "如果窗口没出来，看屏幕右上角菜单栏——这个应用没有 Dock 图标。"
-open "$DEST"
+# 失败时停住。Terminal 的默认设置是"正常退出就关窗"，
+# 所以出错后必须停在这里，否则用户只会看到窗口闪一下。
+die() {
+  echo
+  echo "✗ $1"
+  [ -n "${2:-}" ] && echo "  $2"
+  echo
+  echo "── 按任意键关闭这个窗口 ──"
+  read -n 1 -s
+  exit 1
+}
 
 echo
-echo "按任意键关闭这个窗口。"
+echo "  浮窗待办 · 安装"
+echo "  ────────────────────"
+echo
+
+# 1) 源文件齐不齐。只解压了一半、或者被人单独挪走了，都在这里露出来。
+[ -d "$SRC" ] || die "没找到「$SRC」" \
+  "「安装.command」必须和「$SRC」待在同一个文件夹里。如果你把它单独拷出来了，请回到解压出来的文件夹里双击。"
+[ -x "$SRC/Contents/MacOS/DeskTodo" ] || die "「$SRC」是残缺的" \
+  "里面的程序文件不见了，多半是压缩包没解压完整。重新下载一次再试。"
+
+# 2) 目标目录
+mkdir -p "$DEST_DIR" 2>/dev/null || die "建不了 $DEST_DIR" \
+  "你的用户目录可能没有写权限。可以在 Finder 里手动新建一个「应用程序」文件夹试试。"
+
+# 3) 旧版本：先让它退出，不然替换会失败
+if [ -d "$DEST" ]; then
+  echo "  · 发现已装的版本，先退它（你的记录不会被碰）"
+  osascript -e 'tell application "浮窗待办" to quit' >/dev/null 2>&1
+  for _ in 1 2 3; do
+    pgrep -x DeskTodo >/dev/null 2>&1 || break
+    sleep 1
+  done
+  pkill -x DeskTodo >/dev/null 2>&1
+  sleep 1
+  rm -rf "$DEST" 2>/dev/null || die "删不掉旧版本" \
+    "请手动打开访达，到「个人文件夹 → 应用程序」，把「浮窗待办」拖进废纸篓，再运行一次这个脚本。"
+fi
+
+# 4) 拷过去
+echo "  · 正在复制到 $DEST_DIR"
+cp -R "$SRC" "$DEST" 2>/dev/null || die "复制失败" \
+  "常见原因是磁盘空间不够，或者 ~/Applications 没有写权限。"
+
+# 5) 摘掉"从网络下载"的隔离标记，否则第一次启动会被系统拦住
+xattr -dr com.apple.quarantine "$DEST" >/dev/null 2>&1
+
+# 6) 自检：装完的东西是不是真的能跑
+[ -x "$DEST/Contents/MacOS/DeskTodo" ] || die "装完却找不到程序文件" \
+  "这次复制没成功，请重新运行一次；还不行就换一种解压方式（用系统自带的「归档实用工具」）。"
+
+if ! codesign --verify --deep --strict "$DEST" >/dev/null 2>&1; then
+  echo "  · 签名校验没通过（这个版本没买苹果公证，通常不影响使用）"
+fi
+
+# 7) 打开
+echo "  · 启动"
+open "$DEST" 2>/dev/null || die "装好了，但打不开" \
+  "去访达「个人文件夹 → 应用程序」里找到「浮窗待办」，按住 Control 点它 →「打开」，试一次。"
+
+echo
+echo "✓ 装好了。"
+echo
+echo "  它没有 Dock 图标。现在应该能看到："
+echo "    · 屏幕右上角菜单栏，多了个小图标"
+echo "    · 桌面右下角，有个小圆点"
+echo
+echo "  都没出现的话，再双击一次 ~/Applications/浮窗待办.app 就好。"
+echo
+echo "  你的记录存在 ~/Library/Application Support/DeskTodo/"
+echo "  以后删掉 app、换新版本，记录都不会丢。"
+echo
+echo "── 按任意键关闭这个窗口 ──"
 read -n 1 -s
 EOS
-chmod +x "$STAGE/安装.command"
+chmod +x "$PKG/安装.command"
 
 # ---- 读我 ----
-cat > "$STAGE/读我.txt" <<'EOT'
+cat > "$PKG/读我.txt" <<'EOT'
 浮窗待办 · 体验版
 =================
 
 这是什么
 --------
-一个放在桌面上的待办窗口：常驻在最上面，随手写、随手勾。
-它还有一本账：每天勾掉几件，一年下来能画出你的"年轮"。
+一个贴在桌面上的待办浮窗：常驻最上层，随手写、随手勾。
+干完勾掉，年底能翻回来看这一年到底做了多少、哪天在做、哪天没有。
 
 一句话原则：所有数据只在这台电脑上。没有账号、没有服务器、
 没有任何上报——它连你打开过几次都不知道。
 
 
-怎么装（两步）
---------------
-1. 双击这个文件夹里的「安装.command」
-   第一次会被系统拦住，改成：右键点它 →「打开」→ 再点「打开」
-2. 装好后窗口会自己出来
+怎么装
+------
+你现在这个文件夹里有四样东西：
 
-如果窗口没出来：看屏幕右上角菜单栏，有个小图标。
-这个应用故意没有 Dock 图标——它是个浮窗，不是正经窗口应用。
+    浮窗待办.app      程序本身，别直接双击它
+    安装.command      你要点的是这个
+    读我.txt          就是这一份
+    体验清单.md       用之前扫一眼，不用全看
+
+【第 1 步】右键点「安装.command」→ 选「打开」→ 弹窗里再点一次「打开」
+
+    为什么不让你直接双击？
+    这个版本没买苹果的开发者认证（99 美元/年），系统看到"来路不明的
+    程序"会拦一下——那是它在保护你，不是坏了。
+
+    直接双击的话，弹窗里只有「移到废纸篓」和「取消」。
+    看到那个别慌：点「取消」，然后照上面说的右键打开。
+    只需要做这一次，以后不用再右键。
+
+【第 2 步】等它跑完。它会自己装到「个人文件夹 → 应用程序」并打开。
+    中途任何一步出问题，它都会停下来告诉你原因，不会一闪就没。
+
+装完应该看到：
+    · 屏幕右上角菜单栏，多了个小图标
+    · 桌面右下角，有个小圆点（能拖动）
+都没有的话：去「个人文件夹 → 应用程序」，双击「浮窗待办」。
 
 
-第一次打开会问你两件事
+第一次打开会被问两件事
 ----------------------
 · 日历 / 提醒事项：点「允许」或「不允许」都行。
-  允许了，它会读你日历里有没有会，用来对照"这天有会 vs 没会，
-  干活差多少"。只读，不改你的日历。
+  允许了，它会读你日历里有没有会，只用来看"有会 vs 没会，
+  干活差多少"。只读，绝不改你的日历。
 
 · 完全磁盘访问：**可以不弄**。
-  这个权限只用来读系统「屏幕使用时间」。不给，那一行就不显示，
-  其它功能一点不受影响。想弄的话在报告里点那行链接，会跳到设置页，
-  把这个 app 拖进列表就行。
+  只用来读系统「屏幕使用时间」。不给，那一行就不显示，
+  其它功能一点不受影响。
 
 
 数据在哪
 --------
-~/Library/Application Support/DeskTodo/data.json
+    ~/Library/Application Support/DeskTodo/data.json
 
-纯文本，用任何编辑器都能打开。
-菜单里「导出全部数据…」会给你一个 zip：原始 data.json + 一份人能读的说明。
-菜单里「清空全部数据…」是真的删干净——不进废纸篓、不留副本。
+纯文本，任何编辑器都能打开，字段名是人话。
+
+菜单「导出全部数据…」→ 一个 zip：原始 data.json + 一份人能读的说明。
+菜单「清空全部数据…」→ 真的删干净，不进废纸篓、不留副本。
+
+
+怎么更新
+--------
+下载新版本 → 解压 → 还是右键「安装.command」→ 打开。
+
+它会自己退出旧版、替换、再打开。记录在 ~/Library 里，一个都不会少。
+
+
+怎么卸载
+--------
+把「个人文件夹 → 应用程序 → 浮窗待办」拖进废纸篓就行。
+
+记录不会跟着删。想彻底清干净：先打开它，菜单里「清空全部数据…」，
+再删 app。
 
 
 怎么反馈
 --------
-见 体验清单.md。核心三条：
-  1. 哪里看不懂（这个最重要）
-  2. 哪里数不对
-  3. 什么时候你不想打开它
+见 体验清单.md。最值钱的一条是：**这一周里哪一天你根本没打开它，为什么。**
 
 菜单里「复制诊断信息」会复制一段纯计数和状态，不含任何任务内容，
 直接粘给我就行。
+
 EOT
 
 # ---- 体验清单 ----
-cat > "$STAGE/体验清单.md" <<'EOT'
+cat > "$PKG/体验清单.md" <<'EOT'
 # 体验时请重点看这几件事
 
 不用全部做完。挑你在意的看，看不下去的直接说，那本身就是结论。
@@ -196,7 +293,7 @@ EOT
 
 echo "==> 压缩"
 rm -f "$ZIP"
-( cd "$STAGE" && ditto -c -k --norsrc --noextattr . "$ZIP" )
+( cd "$STAGE" && ditto -c -k --keepParent --norsrc --noextattr "$PKGNAME" "$ZIP" )
 
 SIZE=$(du -h "$ZIP" | cut -f1)
 # 变量后面紧跟中文标点时必须写成 ${ZIP}：zsh 会把多字节字符当成变量名的一部分

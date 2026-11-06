@@ -17,7 +17,8 @@
   var state = {
     nodes: [], seq: 1, log: [], daily: {}, flow: {}, byProj: {}, anniv: {},
     fb: [], hide: {}, gap: {}, gapOff: 0, said: {}, saidN: {}, vote: {},
-    seen: {}, seenFrom: ''            // seenFrom = 第一次记下「这天开着」的日期，用来划清「之前不算」
+    seen: {}, seenFrom: '',           // seenFrom = 第一次记下「这天开着」的日期，用来划清「之前不算」
+    settle: ''                        // 日结条已经给哪天看过。存盘，否则一天开关三次就见三次
   };
 
   /* 数据格式版本。加字段只加不改；导出的"读我.md"里也写这个数——
@@ -160,7 +161,8 @@
         flow: state.flow || {}, byProj: state.byProj || {}, anniv: state.anniv || {},
         fb: state.fb || [], hide: state.hide || {}, gap: state.gap || {},
         gapOff: state.gapOff || 0, said: state.said || {}, saidN: state.saidN || {},
-        vote: state.vote || {}, seen: state.seen || {}, seenFrom: state.seenFrom || ''
+        vote: state.vote || {}, seen: state.seen || {}, seenFrom: state.seenFrom || '',
+        settle: state.settle || ''
       })
     });
     send('status', { pending: pendingCount() });

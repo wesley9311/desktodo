@@ -85,7 +85,7 @@ const seenDays = (() => {
 })();
 
 const defaultLoad = {
-  nodes: [], seq: 1, log: [], daily, flow: { '2026-03-02': { n: 12, x: 3 } },
+  nodes: [], seq: 1, log: [], daily, flow: { '2026-03-02': { n: 12, x: 3, q: 2 } },
   byProj: {}, anniv: {}, fb: [], hide: {}, gap: {}, gapOff: 0,
   said: { '2026-10': { avg: '日均 2.8 件', meet: '有会反而做得多' } }, saidN: {}, vote: {},
   seen: seenDays, seenFrom: '2026-01-05'
@@ -169,6 +169,8 @@ const caseTabs = makePage('__t_tabs.html', {
   });
   tab('yr');
   ok('年轮标题对', txt().indexOf('年轮') >= 0);
+  // 认赔要单独看得见：它是"我认下这件事不做了"，不是"我不想要了"
+  ok('年轮里能看见认赔件数', txt().indexOf('认赔') >= 0, txt().slice(0, 300));
   // 年页不许再统计"节日 N 天"：那是日历条目数，不是这一年干了什么
   ok('年页不统计节日天数', txt().indexOf('节日 ') < 0, txt().slice(0, 300));
   tab('day');
@@ -242,10 +244,19 @@ const caseDebt = makePage('__t_debt.html', {
   }).length;
   ok('销掉的那件从清单消失', stillThere === 0, '还在 ' + stillThere + ' 处');
 
+  // 认赔 ≠ 删掉。一个是"我认下这件事不做了"，一个是"这条我不想要了"。
+  // 混成一个数，那笔了结就没有重量了——报告里也再没人看得见。
+  var fl = (window.__debugState().flow || {})["${TODAY_K}"] || {};
+  ok('销账记进 q（认赔），不混进 x（删掉）', fl.q === 1 && !fl.x, JSON.stringify(fl));
+
   var backs = document.querySelector('.d-back');
   ok('有返回今天的出口', !!backs);
   if (backs) backs.click();
-  ok('返回后回到日程', !!document.querySelector('.a-row'));
+  // 展开态下 agenda 只留「要你处理」的条；返回之后债务行就该没了。
+  // 日程摘要（.a-head）在展开态是多余的，footer 已经在说同一件事。
+  ok('返回后不再显示欠账行', !document.querySelector('.d-row'));
+  ok('展开态不重复日程摘要',
+    !document.querySelector('.a-head') || getComputedStyle(document.querySelector('.a-head')).display === 'none');
   `
 });
 
