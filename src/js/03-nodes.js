@@ -350,7 +350,11 @@
   /* 轻提示：优先就地替换底部状态文字（不遮挡、不改变窗口高度） */
   function toast(text) {
     clearTimeout(toastTimer);
-    var footVisible = el.footer && !el.footer.classList.contains('hidden');
+    /* 判据必须是「footer 此刻是否真的占位置」，不能看 .hidden 类：
+       收起态 footer 是被 CSS display:none 的，类上没有 .hidden，
+       以前照这个类走的话提示写进隐藏的 footer，屏幕上什么都没有
+       ——连「保存失败」都发不出来，那是最坏的一种静默。 */
+    var footVisible = el.footer && el.footer.offsetParent !== null;
     if (footVisible) {
       toastActive = true;
       el.summary.textContent = text;
@@ -475,6 +479,9 @@
       created: Date.now()
     };
     state.nodes.push(t);
+    // 这也是一条「新建」，和 addTask / addTaskTo / addNodeWithPath 一样要记进流水：
+    // 少记一笔，年轮「新写 N 件」就比真实少，flowLine 的"多做/少做"跟着偏。
+    bumpFlow('n', 1);
     if (targetProject) { var pp = byId(targetProject); if (pp) pp.collapsed = false; }
     persist();
     render();
@@ -536,7 +543,11 @@
       markUndone(t);
     } else {
       markDone(t);
-      t.remindAt = null;
+      /* 单次提醒勾掉就清（已经做到了，别再响）；
+         时间段提醒是"每天这个点，到结束日"的常设承诺，勾掉时保留它，
+         取消勾选时由 markUndone 重新算下一次，否则 chip 写着「每天 09:30」
+         而 remindAt 是空，checkDue 永远跳过 = 提醒静默死亡。 */
+      if (!t.range) t.remindAt = null;
       t.fired = false;
     }
     persist();

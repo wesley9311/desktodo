@@ -27,6 +27,12 @@ extension AppDelegate {
             injectWeather(cached)
         }
         refreshWeather(force: false)
+        startWeatherTimer()
+    }
+
+    /// 半小时一轮。以前只在 startWeather 里建，于是"启动时就是离线、之后才恢复联网"
+    /// 的用户永远不会有定时刷新。抽出来给 toggleOffline 用。
+    func startWeatherTimer() {
         guard weatherTimer == nil else { return }
         let t = Timer(timeInterval: 1800, repeats: true) { [weak self] _ in
             self?.refreshWeather(force: false)
@@ -51,6 +57,9 @@ extension AppDelegate {
             let dict = self.fetchWeather()
             DispatchQueue.main.async {
                 self.weatherBusy = false
+                // 请求在途时用户可能刚勾上「不联网」：这时不许把结果推回界面，
+                // 也不许写回缓存——留着旧温度等于让人以为它还在更新。
+                guard !self.weatherOffline else { return }
                 guard let dict = dict,
                       let data = try? JSONSerialization.data(withJSONObject: dict),
                       let s = String(data: data, encoding: .utf8) else { return }
@@ -61,20 +70,37 @@ extension AppDelegate {
         }
     }
 
+    /// 全 app 唯一的网络出口。闸门放在第一行：
+    /// 勾上「不联网」之后，连"手动改天气城市"这条路径也不许发请求——
+    /// README 教用户用 lsof 验证这件事，验证方法不能有一条后门。
     func httpJSON(_ url: String, timeout: TimeInterval = 8) -> Any? {
+        guard !weatherOffline else { return nil }
         guard let u = URL(string: url) else { return nil }
         var req = URLRequest(url: u)
         req.timeoutInterval = timeout
         req.setValue("DeskTodo/1.0", forHTTPHeaderField: "User-Agent")
+        req.cachePolicy = .reloadIgnoringLocalCacheData
         var out: Any?
         let sem = DispatchSemaphore(value: 0)
-        URLSession.shared.dataTask(with: req) { data, _, _ in
+        // ephemeral：不落 cookie、不落磁盘缓存。这样 SECURITY 里那句
+        // "没有 cookie、没有标识符" 才是实现事实，而不是只靠天气接口不设 cookie。
+        Self.weatherSession.dataTask(with: req) { data, _, _ in
             if let data = data { out = try? JSONSerialization.jsonObject(with: data) }
             sem.signal()
         }.resume()
         _ = sem.wait(timeout: .now() + timeout + 2)
         return out
     }
+
+    private static let weatherSession: URLSession = {
+        let cfg = URLSessionConfiguration.ephemeral
+        cfg.httpCookieStorage = nil
+        cfg.httpCookieAcceptPolicy = .never
+        cfg.urlCache = nil
+        cfg.requestCachePolicy = .reloadIgnoringLocalCacheData
+        cfg.timeoutIntervalForRequest = 8
+        return URLSession(configuration: cfg)
+    }()
 
     func fetchWeather() -> [String: Any]? {
         var lat = UserDefaults.standard.double(forKey: "wxLat")
@@ -132,6 +158,7 @@ extension AppDelegate {
             nativeToast("已断网：天气停更，进程不再发任何请求")
         } else {
             nativeToast("恢复联网：只请求天气，本地数据一个字节都不传")
+            startWeatherTimer()
             refreshWeather(force: true)
         }
     }
@@ -165,6 +192,10 @@ extension AppDelegate {
         guard resp == .alertFirstButtonReturn else { return }
 
         let name = tf.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        if weatherOffline {
+            nativeToast("现在是「不联网」状态，先恢复联网再改城市")
+            return
+        }
         if name.isEmpty {
             for k in ["wxLat", "wxLon", "wxCity", "wxAt"] {
                 UserDefaults.standard.removeObject(forKey: k)

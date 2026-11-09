@@ -347,8 +347,12 @@
     host.appendChild(head);
 
     // 日结：每天第一次打开露一次，看过就不再出现（标记写盘，重启也不重来）
+    /* 注意「露一次」的主语是**用户看见**，不是「渲染了一次」。
+       小圆点态窗口是 orderOut 的，JS 还在跑：跨天时 __tick 会走 rollover → render，
+       如果这里只看 settleSeenToday，条会在看不见的窗口里生成、顺手把 settle 写盘，
+       用户当天就再也见不到它了。所以不可见时既不建 DOM、也不写盘，等 __onShow。 */
     var settle = settleText();
-    if (settle && !settleSeenToday()) {
+    if (settle && !settleSeenToday() && pageVisible) {
       var pend = statsToday().pending;
       var sb = document.createElement('div');
       sb.className = 'a-settle';
@@ -367,7 +371,7 @@
       sb.appendChild(stx);
       sb.appendChild(sx);
       host.appendChild(sb);
-      // 出现即算看过：不点 ✕ 也算，否则关掉再开又会来一次
+      // 在可见页面里出现即算看过：不点 ✕ 也算，否则关掉再开又会来一次
       state.settle = dayKey(Date.now());
       persist();
     }

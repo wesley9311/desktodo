@@ -176,9 +176,11 @@ extension AppDelegate {
         if sourcesBusy { return }
         sourcesBusy = true
         sourcesAt = Date()
-        ExtSources.shared.snapshot { [weak self] dict in
+        ExtSources.shared.snapshot(focusAllowed: !focusDisabledUntilRestart) { [weak self] dict in
             guard let self = self else { return }
             self.sourcesBusy = false
+            // 升级换了签名 → 系统把已授权的项退回"未决定"。这里检测并主动重问一次。
+            self.detectAuthResetIfNeeded(dict)
             if let d = try? JSONSerialization.data(withJSONObject: dict),
                let s = String(data: d, encoding: .utf8) {
                 self.webView?.evaluateJavaScript("window.__ext && window.__ext(\(s));", completionHandler: nil)
@@ -218,6 +220,48 @@ extension AppDelegate {
                 if (r["st"] as? String) == "ok" { bits.append("待办 \(r["open"] as? Int ?? 0) 件") }
                 self.nativeToast(bits.isEmpty ? "已刷新 · 还没有可读的数据" : "已刷新 · " + bits.joined(separator: " · "))
             }
+        }
+    }
+
+    /* 升级/换签名之后，TCC 会把"已授权"退回"未决定"：
+       日历、提醒事项回到 ask，完全磁盘访问回到 nofda。
+       系统不会主动再弹框（extAsked 早就写过），用户看到的就是"功能突然没了"。
+       这里用"曾经 ok / 现在不是 ok"这个组合来识别重置，主动重问一次，
+       并把"完全磁盘访问要手动重加"这句话说清楚。 */
+    func detectAuthResetIfNeeded(_ dict: [String: Any]) {
+        let d = UserDefaults.standard
+        let cal = (dict["cal"] as? [String: Any])?["st"] as? String ?? "?"
+        let rem = (dict["rem"] as? [String: Any])?["st"] as? String ?? "?"
+        let scr = (dict["screen"] as? [String: Any])?["st"] as? String ?? "?"
+        if cal == "ok" { d.set(true, forKey: "everCal") }
+        if rem == "ok" { d.set(true, forKey: "everRem") }
+        if scr == "ok" { d.set(true, forKey: "everScreen") }
+
+        /* 两种"被重置"的样子：
+           1. 曾经 ok、现在退回 ask —— 系统把旧授权收回去了（换签名最常见）；
+           2. extAsked 已经写过（说明这个 app 以前问过），但现在还是 ask ——
+              同上，只是没有历史记录可对照（本次升级前还没有 ever* 标记）。
+           完全磁盘访问单独看：曾经 ok、现在 nofda。 */
+        let askStuck = d.bool(forKey: "extAsked") && (cal == "ask" || rem == "ask")
+        let reset = askStuck
+            || (d.bool(forKey: "everCal") && cal == "ask")
+            || (d.bool(forKey: "everRem") && rem == "ask")
+            || (d.bool(forKey: "everScreen") && scr == "nofda")
+        guard reset else {
+            // 全部恢复之后再遇到下一次重置，还要能再提示
+            if cal == "ok" && rem == "ok" && scr == "ok" {
+                d.set(false, forKey: "authResetHandled")
+            }
+            return
+        }
+        guard !d.bool(forKey: "authResetHandled") else { return }
+        d.set(true, forKey: "authResetHandled")
+        debugLog("authReset: 授权被系统重置 cal=\(cal) rem=\(rem) screen=\(scr)")
+        var msg = "权限被系统重置了（这次升级换了签名）"
+        if scr == "nofda" { msg += " · 完全磁盘访问要手动去设置里删掉再加回" }
+        nativeToast(msg + " · 正在重新请求日历/提醒")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak self] in
+            self?.requestBoth()
         }
     }
 

@@ -3,7 +3,7 @@
 **一个贴在桌面上的待办浮窗。macOS，原生，零依赖，数据只在你硬盘上。**
 
 [![CI](https://github.com/wesley9311/desktodo/actions/workflows/ci.yml/badge.svg)](https://github.com/wesley9311/desktodo/actions/workflows/ci.yml)
-`0.5.0` · MIT · macOS 12+ · 1.2 MB · 129 条断言
+`0.5.0` · MIT · macOS 12+ · 1.2 MB · 195 条断言
 
 ![浮窗待办：今天的清单](docs/images/today.png)
 
@@ -31,7 +31,11 @@
 3. 完事。它没有 Dock 图标，看右上角菜单栏 / 桌面右下角的小圆点
 
 > 直接双击会被系统拦住，弹窗里只有「移到废纸篓」和「取消」——看到那个点「取消」，
-> 然后照第 2 步右键打开。**只需要这一次。**
+> 然后照第 2 步右键打开。**只有这一次。**
+
+**升级**也是同一套动作（下载新包 → 右键 `安装.command`）。升级后日历 / 提醒事项 /
+完全磁盘访问要**重新授权一次**：这个包没做 Apple 公证，每版签名都不同，系统会把它
+当成另一个程序，把授权收回去。记录不会丢——数据不在 app 里面。
 >
 > 原因：没做 Apple 公证（要付费开发者账号），Gatekeeper 对来路不明的程序一律先拦。
 > 安装脚本跑起来之后会自动去掉隔离标记，之后双击就正常了。手动绕过：
@@ -101,7 +105,7 @@ cd desktodo
 不做账号、不做云同步、不做埋点、不做崩溃上报、不调任何模型、
 不内置节日表、不采窗口标题、不做排行榜、不做番茄钟、不替你补记。
 
-这份"不可加清单"不是姿态。它被写成了 CI 里的检查（`tools/audit.sh` 六类）：
+这份"不可加清单"不是姿态。它被写成了 CI 里的检查（`tools/audit.sh` 八类）：
 谁加一行 `URLSession`，或者往 `Info.plist` 里多要一个权限，构建直接失败。
 
 ## 它读你什么
@@ -115,12 +119,13 @@ cd desktodo
 ## 代码结构
 
 ```
-src/*.swift              原生壳（3269 行 / 15 个文件）：窗口、圆点、菜单、桥、数据源
-src/js/01..10-*.js       页面（3821 行 / 10 个分片），按职责分片，构建时拼成单个 IIFE
-src/styles.css           样式（924 行）
+src/*.swift              原生壳（3654 行 / 15 个文件）：窗口、圆点、菜单、桥、数据源
+src/js/01..10-*.js       页面（3956 行 / 10 个分片），按职责分片，构建时拼成单个 IIFE
+src/styles.css           样式（926 行）
 tools/bundle.sh          分片 → 单文件（WKWebView 用 file://，不能用 ES module）
-tools/audit.sh           边界审计六类：网络出口 / 反遥测 / 权限面 / 数据不入库 / 可移植性 / 口径唯一
-tools/check.js           129 条行为断言（headless Chrome，13 个用例）
+tools/audit.sh           边界审计八类：网络出口 / 反遥测 / 权限面 / 数据不入库 / 可移植性 / 口径唯一 / 调试入口 / 诊断日志
+tools/check.js           195 条行为断言（headless Chrome，21 个用例）
+tools/docs-check.sh      文档里的行数/断言数与实测一致（过期就红）
 tools/dist.sh            打体验版分发包（ad-hoc 签名，谁都能跑）
 ```
 

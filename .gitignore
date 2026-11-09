@@ -22,6 +22,9 @@ data.json
 data.json.bak
 data.backup-*.json
 data.corrupt-*.json
+data.bak.corrupt-*.json
+data.conflict-*.json
+snapshots/
 focus.json
 *.export.json
 

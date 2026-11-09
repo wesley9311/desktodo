@@ -191,13 +191,20 @@ extension AppDelegate {
 
     func finishWipe() {
         let failed = wipeAllData()
+        /* 清空之后还有三件事必须做，少一件"删了就是没了"就是假话：
+           1. 前台计时停了并清空内存——不然 20 秒后定时器会把 focus.json 写回来；
+           2. 这一小段静默期拒写——页面内存里还是旧账本，1 秒 tick 会把它写回磁盘；
+           3. 本次运行不再启动前台计时（下次启动才恢复）。 */
+        FocusTracker.shared.stopAndClear()
+        focusDisabledUntilRestart = true
+        suppressSavesUntil = Date().addingTimeInterval(6)
         reloadEmptyStore()
         // 页面已重载成空，状态提示也没必要留着了
         storeStatus = StoreStatus(kind: .fresh, kept: [], at: Date())
         pushStoreStatus()
         suppressCount = max(0, suppressCount - 1)
         if failed.isEmpty {
-            nativeToast("已清空，没有留副本")
+            nativeToast("已清空：清单、历史、备份、快照、前台计时都没留")
         } else {
             nativeToast("有文件删不掉：\(failed.joined(separator: "、"))")
         }

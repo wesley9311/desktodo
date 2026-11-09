@@ -52,7 +52,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     }
     func applicationDidFinishLaunching(_ notification: Notification) {
         UserDefaults.standard.removeObject(forKey: "autoHide")   // 旧开关不再需要
-        runSaveSelfTestIfAsked()
         loadSettings()
         buildStatusItem()
         buildWindow()
@@ -152,4 +151,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     /// 上一次读盘的结果（normal / recovered / corrupt / fresh）。
     /// 只有状态放这儿；读写、导出、清空的具体做法全在 Storage.swift。
     var storeStatus = StoreStatus()
+
+    /// 我们上次读到/写下的那份数据文件的身份（mtime + 大小）。
+    /// 下一次写之前拿它跟磁盘对一下：对不上说明别的进程改过，不能覆盖。
+    /// 见 Storage.swift 的 writeStore 冲突检测。
+    var lastKnownMtime: Date?
+    var lastKnownSize: Int = -1
+
+    /// 清空之后的一小段静默期：页面内存里还是旧账本，
+    /// 任何一个 1 秒 tick 的写盘都会把刚删掉的文件写回来。这期间一律拒写。
+    var suppressSavesUntil = Date.distantPast
+
+    /// 清空时把前台计时也停掉，并且本次运行不再启动——
+    /// 否则 focus.json 会在 20 秒后被定时器写回来（"删了就是没了"就假了）。
+    var focusDisabledUntilRestart = false
+
+    /// 调试入口的第二把钥匙：只有显式 `--dev` 启动时才认
+    /// dbgExport / dbgReport / DESKTODO_HTML。光写一个 UserDefaults 不够。
+    var devMode: Bool { CommandLine.arguments.contains("--dev") }
 }

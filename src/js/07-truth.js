@@ -258,8 +258,13 @@
   /* --- 人话总结：只说这一屏能看到的数字，不吹、不劝 --- */
   function tipDay(st, stk) {
     var out = [];
-    if (st.total === 0) out.push('今天还什么都没写。');
-    else if (st.pending === 0) out.push(st.done + ' 件全清了，可以关电脑了。');
+    if (st.total === 0) {
+      /* 「今天没有到期的活」不等于「今天什么都没写」：可能今天新建了几件，
+         全排到了以后。流水里有据可查（n = 今天新建的件数），用它说真话——
+         否则底栏说「还剩 N 件事」、这张卡说「今天还什么都没写」，同一屏两句话打架。 */
+      var fn = (flowMap()[dayKey(Date.now())] || {}).n || 0;
+      out.push(fn ? '今天写了 ' + fn + ' 件，都排到了以后。' : '今天还什么都没写。');
+    } else if (st.pending === 0) out.push(st.done + ' 件全清了，可以关电脑了。');
     else if (st.done === 0) out.push('还没动。挑最短的那件，先破个零。');
     else {
       var s = '做了 ' + st.done + ' 件，还剩 ' + st.pending + ' 件。';
@@ -349,10 +354,13 @@
     var st = statsToday();
     var stk = streakDays();
     var d = new Date();
+    /* 报告卡看哪一年：默认跟着今天；从年轮公告点进来时是公告报的那一年
+       （1/1–1/15 公告报去年，点进去必须也是去年，不能是今年的空账本）。 */
+    var yr = reportYearSel || d.getFullYear();
 
     var head = '<div class="r-head"><span class="r-title">账本</span>'
       + '<span class="r-sub">' + (reportTab === 'yr'
-        ? (d.getFullYear() + ' 年轮 · 截至 ' + shortDate(d.getTime()))
+        ? (yr + ' 年轮 · 截至 ' + shortDate(d.getTime()))
         : (shortDate(d.getTime()) + ' ' + weekday(d))) + '</span>'
       + '<button class="r-x" data-act="close">收起</button></div>'
       + '<div class="r-tabs">'
@@ -394,7 +402,10 @@
         wnote += '。';
         if (rw.best.n > 1) wnote += '最猛 ' + shortDate(rw.best.day) + '，一天 ' + rw.best.n + ' 件。';
       } else if (rw.observed) {
-        wnote = '这 ' + rw.days + ' 天我开着，一件都没勾。';
+        // observed < days 时，没记录的那几天不能算进"我开着"
+        wnote = rw.observed === rw.days
+          ? '这 ' + rw.days + ' 天我开着，一件都没勾。'
+          : '这 ' + rw.days + ' 天里我开着 ' + rw.observed + ' 天，一件都没勾。';
       } else {
         wnote = '这 ' + rw.days + ' 天没有任何记录，我不知道那几天做没做。';
       }
@@ -419,7 +430,6 @@
         + '</div>' + heatSvg(prevDayN(todayStart(), 181), todayStart())
         + '<div class="r-tip">' + tipRange(rh) + '</div>' + quoteHtml();
     } else {
-      var yr = d.getFullYear();
       var ry = yearStats(yr);
       var yfl = yearFlow(yr);
       var ymo = yearMonths(yr);
@@ -448,6 +458,10 @@
     reportOpen = (typeof force === 'boolean') ? force : !reportOpen;
     el.report.classList.toggle('show', reportOpen);
     if (reportOpen) {
+      /* 年份选择只在「年轮公告点进来」的那一次有效；用户自己再点开报告
+         就回到今天所在的年份，别一直停在去年。 */
+      if (!annivJump) reportYearSel = 0;
+      annivJump = false;
       lockReportHeight(true);    // 每次重新打开都按当前页签重新定高，不留上次的留白
       renderReport();
     } else {

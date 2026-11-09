@@ -86,10 +86,15 @@
     /* "一件没勾"和"我没开过"是两件事。这条以前只判 sum，于是整周开着但没勾东西时，
        图表说"还没有记录"、下面那行总结说"我开着，一件都没勾"——同一屏里两句话打架。 */
     if (!sum) {
-      var anyObs7 = counts.some(function (x) { return x.obs; });
-      return '<div class="r-empty">' + (anyObs7
+      var obs7 = counts.filter(function (x) { return x.obs; }).length;
+      /* 只有 7 天全被观测到，才配说「这 7 天都开着」。
+         只看见 1 天就这么说，等于把「没记录」说成「有记录」——
+         和产品最核心那条口径（没记录 ≠ 0 件）正好相反。 */
+      return '<div class="r-empty">' + (obs7 === 7
         ? '这 7 天都开着，一件没勾'
-        : '近 7 天还没有记录，勾掉第一件就会长出来') + '</div>';
+        : obs7
+          ? '这 7 天里我开着 ' + obs7 + ' 天，一件没勾'
+          : '近 7 天还没有记录，勾掉第一件就会长出来') + '</div>';
     }
     var bars = '';
     counts.forEach(function (it) {
@@ -124,10 +129,13 @@
       if (c > max) max = c;
     }
     if (!sum) {
-      var anyObsW = counts.some(function (x) { return x.obs; });
-      return '<div class="r-empty">' + (anyObsW
+      var obsW = counts.filter(function (x) { return x.obs; }).length;
+      // 同 sevenBars：说"这周开着"必须有每一天的观测证据，否则只报开了几天
+      return '<div class="r-empty">' + (obsW === counts.length
         ? '这周开着，一件没勾'
-        : '这周还没有记录，勾掉第一件就会长出来') + '</div>';
+        : obsW
+          ? '这 ' + counts.length + ' 天里我开着 ' + obsW + ' 天，一件没勾'
+          : '这周还没有记录，勾掉第一件就会长出来') + '</div>';
     }
     var lab = ['一', '二', '三', '四', '五', '六', '日'];
     var bars = '';

@@ -24,6 +24,8 @@
 	<string>12.0</string>
 	<key>LSUIElement</key>
 	<true/>
+	<key>LSMultipleInstancesProhibited</key>
+	<true/>
 	<key>NSCalendarsFullAccessUsageDescription</key>
 	<string>读取你日历里已有的事项，用来对照「这一天有会 / 没会」和实际完成量。只读，不上传。</string>
 	<key>NSCalendarsUsageDescription</key>

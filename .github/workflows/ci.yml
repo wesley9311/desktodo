@@ -9,6 +9,7 @@ name: 边界与行为
 on:
   push:
     branches: [main]
+    tags: ['v*']          # 打 tag 也跑一遍：发布物必须过同一套闸门
   pull_request:
   workflow_dispatch:
 
@@ -45,11 +46,14 @@ jobs:
             && echo "IIFE 包裹正常" \
             || { echo "app.js 外层不是 IIFE"; exit 1; }
 
-      - name: 跑 76 条行为断言
+      - name: 跑行为断言
         env:
           # macOS runner 自带 Chrome，但路径要显式给
           CHROME_BIN: /Applications/Google Chrome.app/Contents/MacOS/Google Chrome
         run: node tools/check.js
+
+      - name: 文档数字与实测一致
+        run: ./tools/docs-check.sh
 
   build:
     name: 编译（不签名）

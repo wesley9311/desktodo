@@ -18,12 +18,30 @@
     nodes: [], seq: 1, log: [], daily: {}, flow: {}, byProj: {}, anniv: {},
     fb: [], hide: {}, gap: {}, gapOff: 0, said: {}, saidN: {}, vote: {},
     seen: {}, seenFrom: '',           // seenFrom = 第一次记下「这天开着」的日期，用来划清「之前不算」
-    settle: ''                        // 日结条已经给哪天看过。存盘，否则一天开关三次就见三次
+    settle: '',                       // 日结条已经给哪天看过。存盘，否则一天开关三次就见三次
+    loadBlocked: false                // 读到更新版本的数据文件：不加载、不写盘（见 __load）
   };
 
   /* 数据格式版本。加字段只加不改；导出的"读我.md"里也写这个数——
      哪天这个 app 不在了，别人靠它对得上格式。 */
   var SCHEMA_V = 2;
+
+  /* 页面此刻是否真的在屏幕上。收起成桌面小圆点时窗口是 orderOut，
+     JS 还在跑、原生心跳还在每秒叫 __tick——这时候渲染出来的东西没人看见，
+     所以「渲染即算看过」的日结要等 pageVisible 才落账，否则会被静默吃掉。
+     值由原生调用的 __onShow / __onBlur（09-boot.js）维护。 */
+  var pageVisible = true;
+
+  /* 报告卡当前看哪一年：0 = 跟着今天走（默认）。
+     年轮公告在 1/1–1/15 报的是去年，点「看」必须能翻到去年，
+     否则公告说 2026、点进去是 2027 的空账本。 */
+  var reportYearSel = 0;
+  var annivJump = false;    // 下一次 toggleReport(true) 是年轮公告发起的，别重置年份
+
+  /* 一次性静音写盘：磁盘被另一个实例改过、页面按那份 JSON 重载时用。
+     重载的内容本来就是磁盘版本，回写只会制造一次多余的写（还可能盖掉
+     对方刚写的东西）。由 09-boot.js 的 __storeConflict 包住 __load。 */
+  var saveMuted = false;
   var weather = null;       // {city,temp,feels,hum,code,isDay,tmax,tmin,rain}
   var ext = null;           // 系统数据：{cal, rem, screen, focus}，读不到就是 null / st!=='ok'
   var reportOpen = false;
@@ -154,6 +172,10 @@
   }
 
   function persist() {
+    /* 版本闸门：读到更新版本的数据文件时内存里是空的，这时候写盘
+       等于用空清单覆盖用户的文件——宁可不存，也不能替他把数据删了。 */
+    if (state.loadBlocked) return;
+    if (saveMuted) return;    // 正在按磁盘版本重载：这份内容就是盘上的，不用回写
     send('save', {
       payload: JSON.stringify({
         v: SCHEMA_V,

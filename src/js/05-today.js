@@ -90,11 +90,15 @@
     return 0;
   }
 
-  function bumpProj(t, delta, ts) {
+  /* pid 是**记账当时**的项目 id（0 = 没挂项目），不是现在的归属：
+     一件任务在项目 A 里完成、之后项目被删（孩子落到顶层）再取消勾选，
+     如果退账时重新算 projOf(t)，就会从"没挂项目"里减、A 里那笔永远留着。
+     所以完成时把归属写进 log 条目（bumpProj 的调用方负责传当时的值）。 */
+  function bumpProj(pid, delta, ts) {
     var y = String(new Date(ts || Date.now()).getFullYear());
     var m = projMap();
     var row = m[y] || (m[y] = {});
-    var k = String(projOf(t) || 0);
+    var k = String(pid || 0);
     var v = Math.max(0, (row[k] || 0) + delta);
     if (v) row[k] = v; else delete row[k];
     if (!Object.keys(row).length) delete m[y];
@@ -136,9 +140,12 @@
   function markDone(t) {
     t.done = true;
     t.doneAt = Date.now();
-    logArray().push({ id: t.id, at: t.doneAt, d: dayStart(t.doneAt) });
+    /* 把「完成时挂在哪个项目下」一起写进明细：退账时要按当时的归属退，
+       不能按退账那一刻的归属退（任务会被删项目、落到顶层）。 */
+    var pid = projOf(t);
+    logArray().push({ id: t.id, at: t.doneAt, d: dayStart(t.doneAt), p: pid });
     bumpDay(t.doneAt, 1);
-    bumpProj(t, 1, t.doneAt);
+    bumpProj(pid, 1, t.doneAt);
     pruneLog();
   }
 
@@ -157,10 +164,21 @@
       if (log[i].id === t.id) { hit = i; break; }
     }
     var at = hit >= 0 ? log[hit].at : (typeof wasAt === 'number' ? wasAt : 0);
+    /* 退到**完成时**的项目里：明细里有当时的 pid（0 也合法）就照它退；
+       老明细没有这个字段，退回现在的行为。以前一律按现在的归属退，
+       删过项目再取消勾选时，那个项目的数字就永久多一件。 */
+    var pid = (hit >= 0 && typeof log[hit].p === 'number') ? log[hit].p : projOf(t);
     if (hit >= 0) log.splice(hit, 1);
     if (at) {
       bumpDay(at, -1);
-      bumpProj(t, -1, at);
+      bumpProj(pid, -1, at);
+    }
+    /* 时间段提醒勾掉时被保留了下来，取消勾选要把它重新排到下一次：
+       否则 chip 还写着「每天 09:30」，remindAt 却是空的，checkDue 永远跳过。 */
+    if (t.range) {
+      var nx = nextRangeAt(t.range, Date.now());
+      if (nx) t.remindAt = nx;
+      t.fired = false;
     }
   }
 
@@ -210,10 +228,9 @@
     if (!state.seenFrom) state.seenFrom = k;   // 只写一次，之后不随裁剪变动
     if (state.seen[k]) return false;
     state.seen[k] = 1;
-    var keys = Object.keys(state.seen).sort();
-    if (keys.length > 800) {
-      keys.slice(0, keys.length - 800).forEach(function (x) { delete state.seen[x]; });
-    }
+    /* seen 永久保留，不裁剪。它也是账本的一部分：删掉旧键会让
+       「看得见的天」「最长连续」在几年后自己变小，导出说明里那句
+       「历史不回改」就成了假话。一天一个键，十年也就 ~36KB。 */
     return true;
   }
 
@@ -235,10 +252,17 @@
      只读 carried —— 这个数从第一天就在记，缺的从来不是数据，是出口。
      它同时来自两条路径：过夜自动继承，以及手动点「→」顺延。
      只认前者的话，「→」就成了免罚券，欠账能被手动点干净。
-     不新算任何衍生指标：这里列出来的每一件，用户都能自己数一遍对上。 */
+     不新算任何衍生指标：这里列出来的每一件，用户都能自己数一遍对上。
+
+     还必须 due <= 今天才算「欠」：手动顺延用在**未来的排期**上时 carried
+     也会涨（02-plan.js pushDue 的口径），但一件后天要做的事并没有"拖"。
+     不这么筛的话，清单上会冒出"拖了 N 天"的未来任务，
+     和报告里「另有 N 件拖过两天」（只数 due<=今天）对不上。 */
   function debts() {
+    var t0 = todayStart();
     return state.nodes.filter(function (n) {
-      return n.type === 'task' && !n.done && (n.carried || 0) >= 2;
+      return n.type === 'task' && !n.done && (n.carried || 0) >= 2
+        && typeof n.due === 'number' && n.due <= t0;
     }).sort(function (a, b) {
       return (b.carried || 0) - (a.carried || 0) || (a.id - b.id);
     });

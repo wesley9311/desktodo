@@ -26,6 +26,9 @@ APP="$PKG/$APPNAME.app"
 # 变成 "-.-<版本>.zip" 这种谁也不敢下的东西。zip 里面的文件名照旧是中文。
 ZIP="$OUTDIR/DeskTodo-$VERSION.zip"
 
+echo "==> 边界审计（不过就不打包）"
+"$ROOT/tools/audit.sh"
+
 echo "==> 清理"
 rm -rf "$STAGE"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources" "$OUTDIR"
@@ -42,6 +45,13 @@ swiftc -O -whole-module-optimization \
   -o "$ROOT/build/DeskTodo-dist" \
   "$SRC"/*.swift \
   -framework Cocoa -framework WebKit -framework EventKit
+
+echo "==> 数据层自检（构建闸门）"
+TMPHOME="$(mktemp -d)"
+if ! DESKTODO_TEST_HOME="$TMPHOME" "$ROOT/build/DeskTodo-dist" --selftest; then
+  echo "!! 自检失败，不打包"; rm -rf "$TMPHOME"; exit 1
+fi
+rm -rf "$TMPHOME"
 
 cp "$ROOT/build/DeskTodo-dist" "$APP/Contents/MacOS/DeskTodo"
 # 编译产物不放 STAGE：那是要压缩的目录，多一个裸二进制别人会问"这是啥"
@@ -182,7 +192,8 @@ cat > "$PKG/读我.txt" <<'EOT'
 
     直接双击的话，弹窗里只有「移到废纸篓」和「取消」。
     看到那个别慌：点「取消」，然后照上面说的右键打开。
-    只需要做这一次，以后不用再右键。
+    这一次之后就能双击打开了。
+    （升级到新版本时还要再右键一次：每个版本的签名不同，系统会重新拦。）
 
 【第 2 步】等它跑完。它会自己装到「个人文件夹 → 应用程序」并打开。
     中途任何一步出问题，它都会停下来告诉你原因，不会一闪就没。
@@ -210,7 +221,7 @@ cat > "$PKG/读我.txt" <<'EOT'
 
 纯文本，任何编辑器都能打开，字段名是人话。
 
-菜单「导出全部数据…」→ 一个 zip：原始 data.json + 一份人能读的说明。
+菜单「导出全部数据…」→ 一个 zip：原始 data.json + focus.json + 一份人能读的说明。
 菜单「清空全部数据…」→ 真的删干净，不进废纸篓、不留副本。
 
 
@@ -219,6 +230,12 @@ cat > "$PKG/读我.txt" <<'EOT'
 下载新版本 → 解压 → 还是右键「安装.command」→ 打开。
 
 它会自己退出旧版、替换、再打开。记录在 ~/Library 里，一个都不会少。
+
+**升级后日历 / 提醒事项 / 完全磁盘访问需要重新授权一次**：
+这个版本没做 Apple 公证，每个新包的签名都不一样，系统会把它当成另一个程序，
+把原来的授权收回去（这是系统的安全设计，不是 bug）。
+打开后如果看到「需要授权」：菜单「数据来源 → 请求日历授权…」点一下；
+「完全磁盘访问」要到系统设置里把旧的删掉、再把新的拖进去。
 
 
 怎么卸载

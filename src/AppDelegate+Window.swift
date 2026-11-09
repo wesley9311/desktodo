@@ -60,7 +60,8 @@ extension AppDelegate {
 
     func loadHTML() {
         var url: URL?
-        if let env = ProcessInfo.processInfo.environment["DESKTODO_HTML"],
+        // 调试入口：任何本地 HTML 都能拿到 bridge 权限，所以必须显式 --dev 才认
+        if devMode, let env = ProcessInfo.processInfo.environment["DESKTODO_HTML"],
            FileManager.default.fileExists(atPath: env) {
             url = URL(fileURLWithPath: env)
         } else {

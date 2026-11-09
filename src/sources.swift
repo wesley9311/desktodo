@@ -69,7 +69,7 @@ final class ExtSources {
 
     // MARK: 汇总（页面一次拿全）
 
-    func snapshot(_ done: @escaping ([String: Any]) -> Void) {
+    func snapshot(focusAllowed: Bool = true, _ done: @escaping ([String: Any]) -> Void) {
         let year = Calendar.current.component(.year, from: Date())
         var out: [String: Any] = [:]
         out["cal"] = calendarSnapshot(year: year)
@@ -80,7 +80,8 @@ final class ExtSources {
            两个都读会得到两个"今天用了多久"，页面只能二选一，
            那不如一开始就别采第二份。 */
         let screenOk = (sc["st"] as? String) == "ok"
-        FocusTracker.shared.setNeeded(!screenOk)
+        // 清空之后本次运行不再启动前台计时（否则 focus.json 会被定时器写回来）
+        FocusTracker.shared.setNeeded(!screenOk && focusAllowed)
         out["focus"] = FocusTracker.shared.snapshot()
         out["session"] = SessionState.snapshot()
 
@@ -403,6 +404,22 @@ final class FocusTracker {
         NSWorkspace.shared.notificationCenter.removeObserver(
             self, name: NSWorkspace.didActivateApplicationNotification, object: nil)
         cur = nil
+    }
+
+    /// 「清空全部数据」专用：停掉、**不 flush**、清空内存、再删一次文件。
+    /// 不能用 stop()：它会先 flush，等于把要删的东西又写回去。
+    func stopAndClear() {
+        started = false
+        timer?.invalidate()
+        timer = nil
+        NSWorkspace.shared.notificationCenter.removeObserver(
+            self, name: NSWorkspace.didActivateApplicationNotification, object: nil)
+        days = [:]
+        cur = nil
+        since = Date()
+        dirty = false
+        canWrite = true
+        try? FileManager.default.removeItem(at: url)
     }
 
     var isRunning: Bool { started }

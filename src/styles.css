@@ -415,7 +415,9 @@
     transition: opacity .16s ease, transform .16s ease;
   }
   .toast.show { opacity: 1; transform: translate(-50%, 0); }
-  body.collapsed .toast { display: none; }
+  /* 收起态也要能看见提示：展开态的 footer 是提示的第一落点，
+     收起态 footer 被藏了，这里再藏一次就等于所有提示都静默
+     ——包括「保存失败：这次改动没写进磁盘」。 */
 
   /* 提醒抽屉 */
   .drawer { display: none; background: var(--drawer); border-top: 1px solid var(--line); }

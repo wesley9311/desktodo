@@ -11,13 +11,13 @@
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│  Swift 壳（3269 行 / 15 个文件）                          │
+│  Swift 壳（3654 行 / 15 个文件）                          │
 │  窗口、菜单、桌面圆点、WKWebView、日历/提醒/屏幕数据源      │
 └───────────────────────┬─────────────────────────────────┘
                         │  ① 原生 → 页面：evaluateJavaScript("window.__xxx(...)")
                         │  ② 页面 → 原生：webkit.messageHandlers.bridge.postMessage
 ┌───────────────────────┴─────────────────────────────────┐
-│  页面（3789 行 JS + 924 行 CSS + 90 行 HTML）             │
+│  页面（3956 行 JS + 926 行 CSS + 90 行 HTML）             │
 │  单文件 app.js，一个 IIFE，10 个分片共享闭包               │
 └─────────────────────────────────────────────────────────┘
 ```
@@ -39,7 +39,7 @@
 | `AppDelegate+Weather.swift` | 207 | **唯一允许联网的文件**：定位 + 取天气 |
 | `AppDelegate+Files.swift` | 68 | 导出、打开数据目录、选文件 |
 | `AppDelegate+Appearance.swift` | 20 | 主题应用 |
-| `Storage.swift` | 330 | 读写 `data.json`、备份、损坏恢复、权限收紧 |
+| `Storage.swift` | 565 | 读写 `data.json`、备份、损坏恢复、权限收紧 |
 | `sources.swift` | 502 | EventKit / knowledgeC / 前台 app 的底层读取 |
 | `Session.swift` | 126 | 空闲、锁屏、熄屏、睡眠状态 |
 | `DesktopDot.swift` | 291 | 圆点的窗口与视图实现 |
@@ -157,7 +157,18 @@ send(type, obj)   // 内部：bridge.postMessage(Object.assign({type}, obj))
 
 ## 4. 数据格式
 
-文件：`~/Library/Application Support/DeskTodo/data.json`，权限 `600`。
+文件都在 `~/Library/Application Support/DeskTodo/`，权限一律 `600`：
+
+| 文件 | 是什么 |
+|---|---|
+| `data.json` | 主文件 |
+| `data.json.bak` / `.bak.1` / `.bak.2` | 最近三代版本 |
+| `snapshots/data-YYYY-MM-DD.json` | 每天第一笔写入时的快照，留 30 天 |
+| `data.corrupt-*` / `data.bak.corrupt-*` | 读不出来时的原文件留证（不会自动删） |
+| `data.conflict-*` | 检测到另一个实例改过文件时留的副本 |
+| `focus.json` | 前台 App 计时（7 天，只在屏幕使用时间读不到时写） |
+
+诊断日志：`~/Library/Logs/DeskTodo/desktodo.log`（`600`，超过 512 KB 轮转一份 `.old`）。
 
 ```json
 {
@@ -278,14 +289,25 @@ dataStart()       // 最早一条数据是哪天
 |---|---|---|---|
 | `./tools/hot.sh` | 只替换 `index.html` / `styles.css` / `app.js` 到已安装的 app，重启 | **只改 HTML/CSS/JS** | 不会（不重签） |
 | `./build.sh` | `swiftc` 编译 + 组装 app + 本机自签证书签名 + 安装到 `~/Applications` | 改了 Swift | 不会（证书固定） |
-| `./tools/dist.sh` | 组装 + **ad-hoc 签名** + 打 zip 到 `dist/` | 发版给别人的时候 | 与权限无关（对方首次运行要右键） |
+| `./tools/dist.sh` | 组装 + **ad-hoc 签名** + 打 zip 到 `dist/` | 发版给别人的时候 | **会掉**：ad-hoc 每次重编 cdhash 都变 → 三项授权清零，更新后要重新授权 |
 
 **为什么 `build.sh` 和 `dist.sh` 的签名不一样**：
 
 - `build.sh` 用本机固定自签证书（`~/Library/Keychains/desktodo-signing.keychain-db`），
   TCC 授权（日历 / 提醒 / 磁盘）绑的是这个证书的指定要求，所以**重建不掉权限**。
 - `dist.sh` 用 ad-hoc（`codesign -s -`），任何机器都能跑，没有证书依赖。
-  代价是对方第一次要右键打开，且每次更新可能重新授权即可。
+  代价是：对方第一次要右键打开；**每次更新 TCC 会把三项授权清零**（ad-hoc 的指定要求
+  就是 cdhash，重编一次就变），需要重新授权一次。以前这里写"与权限无关"是错的，
+  2026-11-09 在本机实测到了：装 Release 包的同一秒，日志从 `cal=ok rem=ok screen=ok`
+  变成 `cal=ask rem=ask screen=nofda`。
+- 两条路不要混用：**开发机只用 `build.sh`**，要验分发包就去干净机器/虚拟机/另一个账户。
+  把分发包装回开发机 = 把权限清零一次（而且要手动重授完全磁盘访问）。
+- 升级被重置后的检测：`AppDelegate+Sources.swift` 的 `detectAuthResetIfNeeded`
+  用「曾经 ok / 现在不是 ok」识别，自动重问一次并提示 FDA 要手动重加。
+- `build.sh` 找不到固定证书时**默认失败**，不再静默降级成 ad-hoc；
+  确实要临时用 ad-hoc，显式传 `--adhoc`。
+- `build.sh` / `dist.sh` 都会先跑数据层自检（`--selftest`，只在临时目录里跑），
+  自检不过就不产出、不安装。
 
 ### 6.2 前端打包
 
@@ -305,10 +327,10 @@ dataStart()       // 最早一条数据是哪天
 
 | 层 | 命令 | 管什么 | 现在 |
 |---|---|---|---|
-| 边界 | `./tools/audit.sh` | **不能做的事有没有被偷偷做** | 6 类 |
-| 行为 | `node tools/check.js` | **该做的事有没有做对** | 129 条 / 13 个用例 |
+| 边界 | `./tools/audit.sh` | **不能做的事有没有被偷偷做** | 8 类 |
+| 行为 | `node tools/check.js` | **该做的事有没有做对** | 195 条 / 21 个用例 |
 
-`audit.sh` 的六类：
+`audit.sh` 的八类：
 
 1. **网络出口**：除 `AppDelegate+Weather.swift` 外不许出现 `URLSession` 等；
    页面里不许出现 `fetch` / `XMLHttpRequest` / `WebSocket` / `sendBeacon`；
@@ -317,7 +339,12 @@ dataStart()       // 最早一条数据是哪天
 3. **权限面**：`Info.plist` 的键必须全在白名单里，**多一个就红**。
 4. **数据不入库**：`git ls-files` 里不许有 `data.json` / `*.keychain*` / `dist/` / `build/`。
 5. **可移植性**：源码里不许出现 `/Users/<名字>`。
-6. **口径唯一**：`dayDone` / `dayObserved` 各只一处；除 `05-today.js` 外禁止直接索引 `daily`。
+6. **口径唯一**：`dayDone` / `dayObserved` 各只一处（按实现处数计数，不再按文件数）；除 `05-today.js` 外禁止直接索引 `daily`。
+7. **调试入口**：不许有 `dbgWipe`（启动即清空）这类开关；`dbgExport` / `dbgReport` / `DESKTODO_HTML` 必须由 `--dev` 守卫。
+8. **诊断日志**：不许再写 `/tmp`（全机可读），日志路径只能出现在一处。
+
+另外两层闸门：`build.sh` / `dist.sh` 会先跑 `--selftest`（数据层自检，只在临时目录里跑），
+不过就不产出；`tools/docs-check.sh` 校验文档里写死的行数/断言数和实测一致（过期就红）。
 
 **`audit.sh` 失败等于不能合。** 它就是为"有人顺手加一行 `URLSession`"准备的。
 

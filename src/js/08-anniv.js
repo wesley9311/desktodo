@@ -59,6 +59,10 @@
     annivSeen();
     hideAnniversary();
     reportTab = 'yr';
+    /* 公告报的是哪一年，点进去就翻到哪一年。1/1–1/15 报的是去年，
+       不传年份的话 renderReport 会按今天取今年，看到的是空账本。 */
+    reportYearSel = +(el.anniv.dataset.year || 0);
+    annivJump = true;
     toggleReport(true);
   });
 
@@ -110,6 +114,15 @@
   }
 
   window.__load = function (data) {
+    /* 版本闸门：数据文件比这个 app 认识的格式新（v > SCHEMA_V）时，
+       不加载、不写盘。静默按旧格式读会把新字段丢掉、再把 v 写回旧的，
+       等于把用户的文件降级改坏；原文件留在磁盘上，升级 app 就能读。 */
+    if (data && typeof data.v === 'number' && data.v > SCHEMA_V) {
+      state.loadBlocked = true;
+      toast('数据来自更新版本的 app，请先升级；原文件没动');
+      return;
+    }
+    state.loadBlocked = false;
     if (data && Array.isArray(data.nodes)) {
       state.nodes = data.nodes;
       state.seq = data.seq || (state.nodes.reduce(function (m, t) { return Math.max(m, t.id); }, 0) + 1);

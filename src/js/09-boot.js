@@ -79,6 +79,31 @@
     toast('保存失败：这次改动没写进磁盘');
   };
 
+  /* 磁盘上的 data.json 被另一个实例改过：原生把那份合法 JSON 交过来，
+     页面按磁盘版本重新载入（以磁盘为准，不让两边各写各的）。
+     重载期间静音写盘——刚载入的就是磁盘版本，回写只会制造多余的写。
+     解析失败就只提示、不动内存：宁可停在旧内容，也不拿半份数据覆盖。 */
+  window.__storeConflict = function (diskJson) {
+    var data = null;
+    try { data = JSON.parse(String(diskJson || '')); } catch (err) { data = null; }
+    if (!data || typeof data !== 'object') {
+      toast('数据文件被另一个窗口改过，但那份文件读不出来，先不动当前内容');
+      return false;
+    }
+    saveMuted = true;
+    try {
+      window.__load(data);
+    } finally {
+      saveMuted = false;
+    }
+    if (state.loadBlocked) {
+      toast('数据文件被另一个窗口改过，那是一份更新版本的数据，先不载入');
+      return false;
+    }
+    toast('数据文件被另一个窗口改过，已按磁盘版本重新载入');
+    return true;
+  };
+
   /* 外观：auto 跟随系统 / light / dark（Swift 侧同时切窗口材质） */
   window.__setTheme = function (mode) {
     themeMode = (mode === 'light' || mode === 'dark') ? mode : 'auto';
@@ -129,6 +154,8 @@
   };
 
   window.__onBlur = function () {
+    // 窗口已被原生 orderOut（收成小圆点）：从这一刻起渲染都不算「被看见」
+    pageVisible = false;
     cancelTarget(true);
     closeMenu();
     clearTimeout(clickTimer);
@@ -136,6 +163,8 @@
   };
 
   window.__onShow = function () {
+    // 先置可见再 render：日结条要等到这一步才允许落账（见 02-plan.js）
+    pageVisible = true;
     if (rollover()) persist();
     render();
     tickClock();

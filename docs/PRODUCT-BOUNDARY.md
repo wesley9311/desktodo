@@ -72,7 +72,7 @@ L4 拿到的是**内容**（这个会的标题是"和 X 谈离职"、这个窗�
 
 | 权限 | 授予路径 | 授予成功的硬证据 | 撤销后应该怎样 |
 |---|---|---|---|
-| 日历 | 系统设置 → 隐私与安全性 → 日历 → 勾选「浮窗待办」 | `/tmp/desktodo.log` 出现 `ext cal=ok/…`；年轮页出现「日历 N 项」行 | 行整条消失，退成可点的「授权后显示日历」 |
+| 日历 | 系统设置 → 隐私与安全性 → 日历 → 勾选「浮窗待办」 | `~/Library/Logs/DeskTodo/desktodo.log` 出现 `ext cal=ok/…`；年轮页出现「日历 N 项」行 | 行整条消失，退成可点的「授权后显示日历」 |
 | 提醒事项 | 隐私与安全性 → 提醒事项 | `ext rem=ok/…`；今日页出现「提醒事项今天到期 N 件」 | 同上 |
 | 完全磁盘访问 | 隐私与安全性 → 完全磁盘访问 → 拖入 app | `ext screen=ok` 且 `apps` 非空；今日页从「前台」变「屏幕」 | 变 `nofda`，退回「前台」口径，**不写 0** |
 | 重置某个权限（测试用） | 终端 `tccutil reset Calendars local.desktodo.app` | 重启后日志回 `ask`，界面出现授权提示 | —— |
@@ -487,7 +487,7 @@ desk-todo/
   tools/dist.sh         打体验版分发包：ad-hoc 签名 + 安装脚本 + 读我 + 体验清单
   tools/bundle.sh       前端打包（分片 → 单文件 app.js，必须保留同一个闭包）
   tools/hot.sh          只改页面时用：不重编译，权限不丢
-  tools/check.js        129 条前端行为断言（headless Chrome，13 个用例）
+  tools/check.js        195 条前端行为断言（headless Chrome，21 个用例）
   tools/mkcert.sh       一次性生成本地自签证书
   src/index.html        82 行，纯标记
   src/styles.css        811 行
@@ -713,7 +713,7 @@ desk-todo/
 | 恢复后自愈 | 同上 | 已用备份重建主文件，下次还有"上一版"可退 |
 | 清空是否真删 | `dbgWipe=true`，删前故意塞一个 `data.corrupt-9999…` | 目录只剩 197 字节空 `data.json`，无残留 |
 | 分发包能否跑 | 解压到 `/tmp` 直接 open | 进程起，日志正常；`cal=ask / screen=nofda` —— 权限对每个签名独立，这是对的 |
-| 断言 | `node tools/check.js` | **129 条 / 13 个用例全 PASS** |
+| 断言 | `node tools/check.js` | **195 条 / 21 个用例全 PASS** |
 
 **没验到的**：Developer ID 公证那条路没走过（没有账号），所以"双击就能用"
 这句话现在还不成立，只能说"右键打开一次就能用"。

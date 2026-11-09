@@ -21,27 +21,19 @@ extension AppDelegate {
         startWeather()
         startSources()
 
-        // 排查用：dbgExport=/tmp/x.zip 启动后自动导一份，验证"导出来的包能不能读"
-        if UserDefaults.standard.string(forKey: "dbgExport") != nil {
+        // 排查用：只有显式带 --dev 启动时才认这些开关。
+        // 以前只看 UserDefaults：任何本地进程写一个 dbgWipe 就能让下次启动无确认清空数据，
+        // 发行包里留着这种入口等于给自己埋雷。现在 --dev 是第二把钥匙。
+        if devMode, UserDefaults.standard.string(forKey: "dbgExport") != nil {
             DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
                 self?.exportViaPage { ok in NSLog("DeskTodo export(dbg run) ok=\(ok)") }
             }
         }
 
-        // 排查用：dbgWipe=true 启动后直接走一次"清空"（跳过确认框），
-        // 验证"删了就是没了"——目录里不能剩下任何一份副本。
-        if UserDefaults.standard.bool(forKey: "dbgWipe") {
-            UserDefaults.standard.removeObject(forKey: "dbgWipe")
-            DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { [weak self] in
-                self?.finishWipe()
-                NSLog("DeskTodo wipe(dbg) 完成，剩余文件：\(self?.storeFiles() ?? [])")
-            }
-        }
-
         // 排查用：DESKTODO_REPORT=1 启动时直接摊开某页报告
-        var reportArg = ProcessInfo.processInfo.environment["DESKTODO_REPORT"] ?? ""
+        var reportArg = devMode ? (ProcessInfo.processInfo.environment["DESKTODO_REPORT"] ?? "") : ""
         // open --args 在部分系统上会被吞掉，所以给一个偏好开关当备用（只生效一次）
-        if let d = UserDefaults.standard.string(forKey: "dbgReport"), !d.isEmpty {
+        if devMode, let d = UserDefaults.standard.string(forKey: "dbgReport"), !d.isEmpty {
             reportArg = d
             UserDefaults.standard.removeObject(forKey: "dbgReport")
         }
@@ -78,9 +70,19 @@ extension AppDelegate {
         case "save":
             // 写不进去必须让页面知道：否则"我勾完了"和"一个字节都没落盘"同时成立
             if let s = body["payload"] as? String {
-                if !writeStore(s) {
+                switch writeStore(s) {
+                case .ok:
+                    break
+                case .rejected:
+                    // 写不进去必须让页面知道：否则"我勾完了"和"一个字节都没落盘"同时成立
                     webView?.evaluateJavaScript(
                         "window.__saveFail && window.__saveFail();", completionHandler: nil)
+                case .conflict(let disk):
+                    /* 磁盘上已经是别的实例写的版本。不覆盖它，让页面按磁盘那份重载，
+                       并明确说一句"我改的是另一个窗口"——而不是假装自己写成功了。 */
+                    NSLog("DeskTodo save: 冲突，页面按磁盘版本重载")
+                    let js = "window.__storeConflict && window.__storeConflict(\(disk));"
+                    webView?.evaluateJavaScript(js, completionHandler: nil)
                 }
             } else {
                 NSLog("DeskTodo save: payload 不是字符串，已忽略")

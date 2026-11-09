@@ -53,8 +53,8 @@
 
 ```bash
 ./tools/bundle.sh      # 前端分片 → 单文件（WKWebView 用 file://，不能用 ES module）
-./tools/audit.sh       # 边界审计六类：网络出口 / 反遥测 / 权限面 / 数据不入库 / 可移植性 / 口径唯一
-node tools/check.js    # 129 条行为断言，任何一条 FAIL 就非 0 退出
+./tools/audit.sh       # 边界审计八类：网络出口 / 反遥测 / 权限面 / 数据不入库 / 可移植性 / 口径唯一 / 调试入口 / 诊断日志
+node tools/check.js    # 195 条行为断言，任何一条 FAIL 就非 0 退出
 ```
 
 只改页面（HTML/CSS/JS）时用 `./tools/hot.sh`，它热替换三个文件并重启，**不重新签名**，
