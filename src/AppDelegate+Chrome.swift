@@ -29,18 +29,17 @@ extension AppDelegate {
         debugLog("statusItem ok, img=\(img != nil), visible=\(statusItem.isVisible), buttonFrame=\(btn.frame)")
     }
 
-    /* 诊断日志：~/Library/Logs/DeskTodo/desktodo.log
-       以前写 /tmp/desktodo.log —— 那是 0644、全机可读，内容却包含
+    /* 诊断日志：数据目录 logs/ 下（600、512 KB 轮转）。
+       早先写在 /tmp，那是 0644、全机可读，内容却包含
        使用时段、屏幕秒数、会议数、锁屏时长、前台计时秒数。
        现在放到自己的 Logs 目录、权限 600、超过 512 KB 轮转一份。 */
     func debugLog(_ s: String) {
         NSLog("DeskTodo: \(s)")
         guard let d = "\(Date()) \(s)\n".data(using: .utf8) else { return }
         let fm = FileManager.default
-        let dir = fm.urls(for: .libraryDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("Logs/DeskTodo", isDirectory: true)
+        let dir = store.logsURL
         try? fm.createDirectory(at: dir, withIntermediateDirectories: true)
-        let f = dir.appendingPathComponent("desktodo.log")
+        let f = store.logURL
         if let a = try? fm.attributesOfItem(atPath: f.path),
            let sz = (a[.size] as? NSNumber)?.intValue, sz > 512 * 1024 {
             try? fm.removeItem(at: f.appendingPathExtension("old"))

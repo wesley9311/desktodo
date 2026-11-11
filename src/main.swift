@@ -11,6 +11,16 @@ autoreleasepool {
         exit(probe.runStorageSelfTest() ? 0 : 1)
     }
 
+#if DEBUG
+    // 夹具：重构前后各编一次，用同一份代码跑同一组场景，输出规范化 JSON 做字节比对。
+    if let i = CommandLine.arguments.firstIndex(of: "--fixture"),
+       i + 1 < CommandLine.arguments.count {
+        let probe = AppDelegate()
+        print(probe.runFixture(CommandLine.arguments[i + 1]))
+        exit(0)
+    }
+#endif
+
     // 单实例：同一个 app 只允许一份在跑。
     // 两份同时跑会各持一份内存账本，而保存是整份覆盖 —— 后写者会静默吃掉前写者的改动。
     // 所以第二个进程把已有那份叫到前台，自己立刻退出。

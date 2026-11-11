@@ -1,0 +1,404 @@
+import Cocoa
+
+/* 存储层：唯一知道数据放哪、怎么写、怎么备份、怎么删的地方。
+   四个约束：
+     1. 写入走同一条串行队列；
+     2. 落盘用「临时文件 → fsync → rename → fsync 目录」，权限 600；
+     3. 读取方必须忽略未知字段（只验证 v 与 nodes/tasks 的形状）；
+     4. schemaVersion > 2 时只读、拒绝写入，并给出可读原因。 */
+
+struct StoreLoad {
+    var kind: StoreStatus.Kind = .normal
+    var kept: [String] = []
+    var json: String = "null"
+    var readOnlyReason: String? = nil
+}
+
+enum StoreSave: Equatable {
+    case ok
+    case rejected
+    case conflict(String)
+}
+
+final class Store {
+    let dir: URL
+    let ledgerURL: URL
+    let backupsURL: URL
+    let snapshotsURL: URL
+    let logsURL: URL
+    let logURL: URL
+    let focusURL: URL
+    let lockURL: URL
+
+    private let queue = DispatchQueue(label: "local.desktodo.store")
+    private var knownMtime: Date?
+    private var knownSize: Int = -1
+    private var readOnly = false
+    private let version = (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "dev"
+
+    private let stampFmt: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.dateFormat = "yyyyMMdd'T'HHmmss"
+        return f
+    }()
+    private let dayFmt: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.dateFormat = "yyyyMMdd"
+        return f
+    }()
+
+    init(dataDirectory: URL) {
+        dir = dataDirectory
+        ledgerURL = dir.appendingPathComponent("ledger.json")
+        backupsURL = dir.appendingPathComponent("backups", isDirectory: true)
+        snapshotsURL = dir.appendingPathComponent("snapshots", isDirectory: true)
+        logsURL = dir.appendingPathComponent("logs", isDirectory: true)
+        logURL = logsURL.appendingPathComponent("desktodo.log")
+        focusURL = dir.appendingPathComponent("focus.json")
+        lockURL = dir.appendingPathComponent(".desk.lock")
+        prepare()
+        migrate()
+    }
+
+    // MARK: - 准备与迁移
+
+    private func prepare() {
+        let fm = FileManager.default
+        for d in [dir, backupsURL, snapshotsURL, logsURL] {
+            try? fm.createDirectory(at: d, withIntermediateDirectories: true)
+        }
+    }
+
+    /// 三条硬规则：复制不删原文件；升级后首次写入前备份一次；解析失败只读。
+    private func migrate() {
+        let fm = FileManager.default
+
+        // 1) 旧账本 → ledger.json（复制，保留原件）
+        let legacyLedger = dir.appendingPathComponent(LegacyPaths.ledgerFileName)
+        if !fm.fileExists(atPath: ledgerURL.path), fm.fileExists(atPath: legacyLedger.path) {
+            if (try? fm.copyItem(at: legacyLedger, to: ledgerURL)) != nil {
+                NSLog("DeskTodo store: migrated from legacy#1")
+            } else {
+                NSLog("DeskTodo store: migration failed (legacy#1)")
+            }
+        }
+
+        // 2) 旧备份 → backups/ledger.bak.<时间>.json（复制，保留原件）
+        for suffix in ["", ".1", ".2"] {
+            let src = dir.appendingPathComponent(LegacyPaths.backupPrefix + suffix)
+            guard fm.fileExists(atPath: src.path) else { continue }
+            let mtime = (try? fm.attributesOfItem(atPath: src.path))?[.modificationDate] as? Date ?? Date()
+            let dst = backupsURL.appendingPathComponent("ledger.bak.\(stampFmt.string(from: mtime)).json")
+            if !fm.fileExists(atPath: dst.path), (try? fm.copyItem(at: src, to: dst)) != nil {
+                NSLog("DeskTodo store: migrated from legacy#2")
+            }
+        }
+
+        // 3) 旧日志 → logs/desktodo.log（复制，保留原件）
+        if !isTestHome, !fm.fileExists(atPath: logURL.path) {
+            let oldDir = fm.urls(for: .libraryDirectory, in: .userDomainMask)[0]
+                .appendingPathComponent("Logs", isDirectory: true)
+                .appendingPathComponent(LegacyPaths.oldLogFolder, isDirectory: true)
+            let oldLog = oldDir.appendingPathComponent("desktodo.log")
+            if fm.fileExists(atPath: oldLog.path), (try? fm.copyItem(at: oldLog, to: logURL)) != nil {
+                _ = chmod(logURL.path, 0o600)
+                NSLog("DeskTodo store: migrated from legacy#5")
+            }
+        }
+    }
+
+    // MARK: - 校验
+
+    func isValid(_ s: String) -> Bool {
+        guard let d = s.data(using: .utf8),
+              let obj = try? JSONSerialization.jsonObject(with: d) as? [String: Any] else { return false }
+        guard let v = obj["v"] as? NSNumber, String(cString: v.objCType) != "c" else { return false }
+        if let nodes = obj["nodes"] { return nodes is [Any] }
+        if let tasks = obj["tasks"] { return tasks is [Any] }
+        return false
+    }
+
+    private func schemaVersion(_ s: String) -> Int? {
+        guard let d = s.data(using: .utf8),
+              let obj = try? JSONSerialization.jsonObject(with: d) as? [String: Any],
+              let v = obj["v"] as? NSNumber else { return nil }
+        return v.intValue
+    }
+
+    // MARK: - 读
+
+    func load() -> StoreLoad {
+        var out = StoreLoad()
+        queue.sync {
+            let fm = FileManager.default
+            if let s = safeRead(ledgerURL) {
+                if let v = schemaVersion(s), v > storeSchemaVersion {
+                    out.kind = .normal
+                    out.json = s
+                    readOnly = true
+                    out.readOnlyReason = "账本 schemaVersion=\(v)，高于当前应用支持的 \(storeSchemaVersion)"
+                    refreshKnown()
+                    NSLog("DeskTodo store: read-only (schema#1)")
+                    return
+                }
+                readOnly = false
+                out.kind = .normal
+                out.json = s
+                refreshKnown()
+                return
+            }
+
+            if fm.fileExists(atPath: ledgerURL.path) {
+                if let kept = quarantine(ledgerURL) { out.kept.append(kept) }
+            }
+
+            if let bak = newestBackup(), let s = safeRead(bak) {
+                out.kind = .recovered
+                out.json = s
+                if atomicWrite(Data(s.utf8), to: ledgerURL) {
+                    NSLog("DeskTodo store: recovered from backup")
+                }
+                refreshKnown()
+                return
+            }
+
+            out.kind = (fm.fileExists(atPath: ledgerURL.path) || !out.kept.isEmpty) ? .corrupt : .fresh
+            knownMtime = nil
+            knownSize = -1
+        }
+        return out
+    }
+
+    private func safeRead(_ url: URL) -> String? {
+        guard let s = try? String(contentsOf: url, encoding: .utf8), !s.isEmpty, isValid(s) else { return nil }
+        return s
+    }
+
+    private func quarantine(_ url: URL) -> String? {
+        let dst = backupsURL.appendingPathComponent("ledger.corrupt-\(stampFmt.string(from: Date())).json")
+        do {
+            try FileManager.default.moveItem(at: url, to: dst)
+            NSLog("DeskTodo store: bad file kept as a quarantined copy")
+            return dst.lastPathComponent
+        } catch {
+            NSLog("DeskTodo store: quarantine failed")
+            return nil
+        }
+    }
+
+    // MARK: - 写
+
+    func save(_ json: String) -> StoreSave {
+        guard isValid(json) else {
+            NSLog("DeskTodo store: rejected (shape)")
+            return .rejected
+        }
+        guard let data = json.data(using: .utf8) else { return .rejected }
+        var result: StoreSave = .rejected
+        queue.sync {
+            if readOnly {
+                NSLog("DeskTodo store: rejected (read-only)")
+                result = .rejected
+                return
+            }
+            if let v = schemaVersion(json), v > storeSchemaVersion {
+                NSLog("DeskTodo store: rejected (schema#1)")
+                result = .rejected
+                return
+            }
+            let fm = FileManager.default
+            let exists = fm.fileExists(atPath: ledgerURL.path)
+            if exists, let a = try? fm.attributesOfItem(atPath: ledgerURL.path),
+               let m = a[.modificationDate] as? Date,
+               let sz = (a[.size] as? NSNumber)?.intValue {
+                let drifted: Bool
+                if let known = knownMtime {
+                    drifted = abs(m.timeIntervalSince(known)) > 0.5 || sz != knownSize
+                } else {
+                    drifted = true
+                }
+                if drifted {
+                    let copy = backupsURL.appendingPathComponent("ledger.conflict-\(stampFmt.string(from: Date())).json")
+                    try? fm.copyItem(at: ledgerURL, to: copy)
+                    let disk = safeRead(ledgerURL) ?? "null"
+                    NSLog("DeskTodo store: conflict, keep disk version")
+                    result = .conflict(disk)
+                    return
+                }
+            }
+
+            backupBeforeWriteIfNeeded(exists: exists)
+            if exists {
+                rotateBackups()
+                writeDailySnapshotIfNeeded()
+            }
+            if atomicWrite(data, to: ledgerURL) {
+                refreshKnown()
+                result = .ok
+            } else {
+                result = .rejected
+            }
+        }
+        return result
+    }
+
+    /// 升级后第一次写入前备份一次；同一次升级只做一次。
+    private func backupBeforeWriteIfNeeded(exists: Bool) {
+        guard exists else { return }
+        if isTestHome { return }
+        let key = "backupOnceVersion"
+        if UserDefaults.standard.string(forKey: key) == version { return }
+        if let data = try? Data(contentsOf: ledgerURL) {
+            let dst = backupsURL.appendingPathComponent("ledger.bak.\(stampFmt.string(from: Date())).json")
+            if atomicWrite(data, to: dst) {
+                UserDefaults.standard.set(version, forKey: key)
+                NSLog("DeskTodo store: backup before first write")
+            }
+        }
+    }
+
+    private func rotateBackups() {
+        let fm = FileManager.default
+        guard let all = try? fm.contentsOfDirectory(atPath: backupsURL.path) else { return }
+        let names = all.filter { $0.hasPrefix("ledger.bak.") && $0.hasSuffix(".json") }.sorted()
+        if names.count >= 5 {
+            for n in names.prefix(names.count - 4) {
+                try? fm.removeItem(at: backupsURL.appendingPathComponent(n))
+            }
+        }
+        if let data = try? Data(contentsOf: ledgerURL) {
+            _ = atomicWrite(data, to: backupsURL.appendingPathComponent("ledger.bak.\(stampFmt.string(from: Date())).json"))
+        }
+    }
+
+    private func writeDailySnapshotIfNeeded() {
+        guard let data = try? Data(contentsOf: ledgerURL) else { return }
+        let dst = snapshotsURL.appendingPathComponent("ledger-\(dayFmt.string(from: Date())).json")
+        guard !FileManager.default.fileExists(atPath: dst.path) else { return }
+        _ = atomicWrite(data, to: dst)
+        pruneSnapshots(keep: 5)
+    }
+
+    private func pruneSnapshots(keep: Int) {
+        let fm = FileManager.default
+        guard let all = try? fm.contentsOfDirectory(atPath: snapshotsURL.path) else { return }
+        let names = all.filter { $0.hasSuffix(".json") }.sorted()
+        if names.count > keep {
+            for n in names.prefix(names.count - keep) {
+                try? fm.removeItem(at: snapshotsURL.appendingPathComponent(n))
+            }
+        }
+    }
+
+    private func newestBackup() -> URL? {
+        let fm = FileManager.default
+        guard let all = try? fm.contentsOfDirectory(atPath: backupsURL.path) else { return nil }
+        let names = all.filter { $0.hasPrefix("ledger.bak.") && $0.hasSuffix(".json") }.sorted()
+        guard let last = names.last else { return nil }
+        return backupsURL.appendingPathComponent(last)
+    }
+
+    func backupFiles() -> [URL] {
+        let fm = FileManager.default
+        guard let all = try? fm.contentsOfDirectory(atPath: backupsURL.path) else { return [] }
+        return all.filter { $0.hasPrefix("ledger.bak.") && $0.hasSuffix(".json") }
+            .sorted().map { backupsURL.appendingPathComponent($0) }
+    }
+
+    func newestBackupJSON() -> String? {
+        guard let url = newestBackup() else { return nil }
+        return safeRead(url)
+    }
+
+    /// 导出成功后触发一次备份（三个触发点之一）。
+    func backupNow(_ reason: String) {
+        queue.sync {
+            guard let data = try? Data(contentsOf: ledgerURL) else { return }
+            let dst = backupsURL.appendingPathComponent("ledger.bak.\(stampFmt.string(from: Date())).json")
+            _ = atomicWrite(data, to: dst)
+            let fm = FileManager.default
+            if let all = try? fm.contentsOfDirectory(atPath: backupsURL.path) {
+                let names = all.filter { $0.hasPrefix("ledger.bak.") && $0.hasSuffix(".json") }.sorted()
+                if names.count > 5 {
+                    for n in names.prefix(names.count - 5) {
+                        try? fm.removeItem(at: backupsURL.appendingPathComponent(n))
+                    }
+                }
+            }
+            NSLog("DeskTodo store: backup (\(reason))")
+        }
+    }
+
+    // MARK: - 清空
+
+    func wipe() -> [String] {
+        var failed: [String] = []
+        queue.sync {
+            let fm = FileManager.default
+            var targets: [URL] = [ledgerURL, focusURL, lockURL]
+            for d in [backupsURL, snapshotsURL, logsURL] { targets.append(d) }
+            if let all = try? fm.contentsOfDirectory(atPath: dir.path) {
+                for n in all where n.hasPrefix("ledger.") || n.hasPrefix("data.") || n.hasPrefix(".") {
+                    targets.append(dir.appendingPathComponent(n))
+                }
+            }
+            var seen = Set<String>()
+            for u in targets where !seen.contains(u.path) {
+                seen.insert(u.path)
+                guard fm.fileExists(atPath: u.path) else { continue }
+                do { try fm.removeItem(at: u) } catch { failed.append(u.lastPathComponent) }
+            }
+            knownMtime = nil
+            knownSize = -1
+            prepare()
+            NSLog("DeskTodo store: wiped")
+        }
+        return failed
+    }
+
+    // MARK: - 文件与工具
+
+    func files() -> [String] {
+        (try? FileManager.default.contentsOfDirectory(atPath: dir.path))?
+            .filter { !$0.hasPrefix(".") }.sorted() ?? []
+    }
+
+    private func refreshKnown() {
+        if let a = try? FileManager.default.attributesOfItem(atPath: ledgerURL.path),
+           let m = a[.modificationDate] as? Date {
+            knownMtime = m
+            knownSize = (a[.size] as? NSNumber)?.intValue ?? -1
+        } else {
+            knownMtime = nil
+            knownSize = -1
+        }
+    }
+
+    @discardableResult
+    private func atomicWrite(_ data: Data, to dest: URL) -> Bool {
+        let fm = FileManager.default
+        let dir = dest.deletingLastPathComponent()
+        let tmp = dir.appendingPathComponent(".\(dest.lastPathComponent).tmp-\(getpid())")
+        do {
+            try? fm.createDirectory(at: dir, withIntermediateDirectories: true)
+            if fm.fileExists(atPath: tmp.path) { try? fm.removeItem(at: tmp) }
+            try data.write(to: tmp)
+            _ = chmod(tmp.path, 0o600)
+            let fh = try FileHandle(forWritingTo: tmp)
+            try fh.synchronize()
+            try fh.close()
+            if rename(tmp.path, dest.path) != 0 {
+                throw NSError(domain: "DeskTodo.rename", code: Int(errno))
+            }
+            let dfd = open(dir.path, O_RDONLY)
+            if dfd >= 0 { _ = fsync(dfd); close(dfd) }
+            return true
+        } catch {
+            NSLog("DeskTodo store: write failed")
+            try? fm.removeItem(at: tmp)
+            return false
+        }
+    }
+}

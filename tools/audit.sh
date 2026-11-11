@@ -223,7 +223,7 @@ if grep -rn '"/tmp/desktodo.log"' --include='*.swift' src 2>/dev/null | grep -q 
 else
   pass "诊断日志不在 /tmp"
 fi
-LOGOWNERS="$(grep -rln 'Logs/DeskTodo' --include='*.swift' src 2>/dev/null | wc -l | tr -d ' ')"
+LOGOWNERS="$(grep -rln 'desktodo\.log' --include='*.swift' src 2>/dev/null | wc -l | tr -d ' ')"
 if [ "$LOGOWNERS" = "1" ]; then
   pass "日志路径只在一个文件里出现"
 else

@@ -582,13 +582,13 @@ const caseExport = makePage('__t_export.html', {
   var md = window.__exportReadme();
   ok('说明有格式版本', md.indexOf('格式版本：2') >= 0);
   ok('说明写明没记录不等于 0', md.indexOf('没记录 ≠ 0 件') >= 0);
-  ok('说明有字段表', md.indexOf('data.json 里都有什么') >= 0);
+  ok('说明有字段表', md.indexOf('ledger.json 里都有什么') >= 0);
   // 字段表要覆盖真正写进去的键：三层纠错的证据（said/vote）、明细（log）、对账静音（gapOff）
   ok('字段表补了 seq/log/gapOff', md.indexOf('\`seq\`') >= 0 && md.indexOf('\`log\`') >= 0 && md.indexOf('\`gapOff\`') >= 0);
   ok('字段表补了 said/vote', md.indexOf('\`said\`') >= 0 && md.indexOf('\`vote\`') >= 0);
   ok('说明提到 focus.json', md.indexOf('focus.json') >= 0);
   ok('说明写明 seen 永久保留', md.indexOf('永久保留') >= 0);
-  ok('说明教怎么恢复', md.indexOf('Application Support/DeskTodo/data.json') >= 0);
+  ok('说明教怎么恢复', md.indexOf('Application Support/DeskTodo/ledger.json') >= 0);
   ok('年表数字对得上账本', md.indexOf('| 2026 | 5 |') >= 0, md.split('## 每年')[1]);
   // 有观测、真的一件没做的月份，写 0 是对的；只有"没观测"才必须写破折号
   ok('没观测的月不写 0 件', !/\\| [0-9]+ 月 \\| 0 \\| — \\|/.test(md));

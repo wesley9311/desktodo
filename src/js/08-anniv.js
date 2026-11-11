@@ -139,7 +139,7 @@
     } else {
       state.nodes = [];
       // 清空之后 id 计数器也回到 1：留着旧的值，等于把"你以前建过 57 个条目"
-      // 这件事继续写在 data.json 里，那不是清空。
+      // 这件事继续写在 ledger.json 里，那不是清空。
       state.seq = 1;
     }
     state.log = (data && Array.isArray(data.log)) ? data.log : [];

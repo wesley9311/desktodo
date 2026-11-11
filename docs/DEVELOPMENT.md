@@ -3,7 +3,7 @@
 ## 1. 结构
 
 ```
-src/*.swift        原生壳 15 个文件 / 3654 行
+src/*.swift        原生壳 18 个文件 / 3930 行
   main.swift                 入口、单实例守卫、自检模式
   AppDelegate.swift          状态与生命周期（存储状态、窗口、计时器）
   AppDelegate+Window.swift   窗口、缩放、拖拽
@@ -13,7 +13,10 @@ src/*.swift        原生壳 15 个文件 / 3654 行
   AppDelegate+Bridge.swift   页面 ↔ 原生桥、读盘注入
   AppDelegate+Sources.swift  日历/提醒/屏幕时间/会话的数据源接线、权限自检
   AppDelegate+Weather.swift  天气（唯一网络出口）
-  Storage.swift              读写、备份、快照、冲突、清空、自检
+  Storage.swift              存储入口的包装、导出、自检
+  Store.swift                存储层：读/写/备份/快照/冲突/清空/迁移
+  LegacyPaths.swift          旧路径常量（只在这里出现）
+  Fixtures.swift             夹具（仅 DEBUG 编译，用于字节比对）
   sources.swift              EventKit / knowledgeC / 前台 App 计时
   Session.swift              锁屏、熄屏、睡眠、屏保、会话
   DesktopDot.swift           圆点窗口

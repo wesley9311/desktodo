@@ -50,15 +50,15 @@
     L.push('# 浮窗待办 · 数据导出');
     L.push('');
     L.push('导出时间：' + stampNow() + '  ');
-    L.push('格式版本：' + SCHEMA_V + '（对应 data.json 里的 `v`）  ');
+    L.push('格式版本：' + SCHEMA_V + '（对应 ledger.json 里的 `v`）  ');
     L.push('当前清单：' + N + ' 件' + (openN === N ? '，都还没做完' : '，其中 ' + openN + ' 件还没做完') + '  ');
     L.push('历史累计划掉：' + ledger + ' 件（按 `daily` 账本；含已经从清单里清掉的）  ');
     L.push('记录起点：' + (ds ? dayKey(ds) : '还没有记录'));
     L.push('');
-    L.push('这个压缩包里有两样东西：');
+    L.push('这份导出文件里是账本原文加一个 meta 段：');
     L.push('');
-    L.push('- **data.json** —— 全部原始数据。纯文本，用任何编辑器都能打开，不需要这个 app。');
-    L.push('- **读我.md** —— 就是你正在看的这一份。');
+    L.push('- **ledger** —— 全部原始数据。纯文本，用任何编辑器都能打开，不需要这个 app。');
+    L.push('- **meta** —— 导出时间、版本、构建号、schemaVersion。');
     L.push('');
     L.push('这些数据只在这台机器上。这个应用没有账号、没有服务器、没有任何上报，');
     L.push('也没有埋点——它不知道你打开了它几次。');
@@ -111,12 +111,12 @@
       });
       if (open.length > 60) L.push('- …还有 ' + (open.length - 60) + ' 件');
       L.push('');
-      L.push('这里只列标题。项目名、文件路径、提醒时间都在 data.json 里。');
+      L.push('这里只列标题。项目名、文件路径、提醒时间都在 ledger.json 里。');
       L.push('');
     }
 
     /* ---------- 字段说明 ---------- */
-    L.push('## data.json 里都有什么');
+    L.push('## ledger.json 里都有什么');
     L.push('');
     L.push('| 键 | 含义 |');
     L.push('| --- | --- |');
@@ -138,21 +138,21 @@
     L.push('| `anniv` | 哪一年的年度公告看过了 |');
     L.push('');
     L.push('同目录还有一个 `focus.json`：前台 App 计时（只留最近 7 天），');
-    L.push('它和 `data.json` 一起打进了这个压缩包。');
+    L.push('它不随导出文件走，仍留在数据目录里。');
     L.push('');
 
     /* ---------- 怎么恢复 ---------- */
     L.push('## 怎么用回这些数据');
     L.push('');
-    L.push('把 `data.json` 放回这个位置，重新打开应用就行：');
+    L.push('把账本放回这个位置（文件名 `ledger.json`），重新打开应用就行：');
     L.push('');
     L.push('```');
-    L.push('~/Library/Application Support/DeskTodo/data.json');
+    L.push('~/Library/Application Support/DeskTodo/ledger.json');
     L.push('```');
     L.push('');
     L.push('整个文件夹可以直接替换。应用启动时如果发现主文件读不出来，');
-    L.push('会自动用同目录的 `data.json.bak`（上一版），并把坏掉的原文件');
-    L.push('改名成 `data.corrupt-时间.json` 留着，不会覆盖掉。');
+    L.push('会自动用 `backups/` 里的最近一份备份，并把坏掉的原文件');
+    L.push('留成一份带时间戳的副本，不会覆盖掉。');
     L.push('');
 
     /* ---------- 口径 ---------- */

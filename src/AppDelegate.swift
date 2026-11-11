@@ -152,11 +152,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     /// 只有状态放这儿；读写、导出、清空的具体做法全在 Storage.swift。
     var storeStatus = StoreStatus()
 
-    /// 我们上次读到/写下的那份数据文件的身份（mtime + 大小）。
-    /// 下一次写之前拿它跟磁盘对一下：对不上说明别的进程改过，不能覆盖。
-    /// 见 Storage.swift 的 writeStore 冲突检测。
-    var lastKnownMtime: Date?
-    var lastKnownSize: Int = -1
+    /// 存储层。路径、读写、备份、快照、冲突、清空都在它里面。
+    let store = Store(dataDirectory: supportDir)
+
+    /// 账本 schemaVersion 高于当前应用时，这里会带上可读原因；界面据此只读。
+    var storeReadOnlyReason: String?
 
     /// 清空之后的一小段静默期：页面内存里还是旧账本，
     /// 任何一个 1 秒 tick 的写盘都会把刚删掉的文件写回来。这期间一律拒写。
