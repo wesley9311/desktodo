@@ -3,7 +3,7 @@
 ## 1. 结构
 
 ```
-src/*.swift        原生壳 18 个文件 / 3930 行
+src/*.swift        原生壳 18 个文件 / 4303 行
   main.swift                 入口、单实例守卫、自检模式
   AppDelegate.swift          状态与生命周期（存储状态、窗口、计时器）
   AppDelegate+Window.swift   窗口、缩放、拖拽

@@ -1,5 +1,6 @@
 import Cocoa
 import WebKit
+import UniformTypeIdentifiers
 
 // 状态栏菜单、视图大小、开机自启
 extension AppDelegate {
@@ -111,9 +112,18 @@ extension AppDelegate {
 
         // 数据三件事：带得走、看得见、删得掉。这三条做不到，就不能叫本地优先。
         menu.addItem(.separator())
-        let exp = NSMenuItem(title: "导出全部数据…", action: #selector(doExport), keyEquivalent: "")
+        let exp = NSMenuItem(title: "导出账本…", action: #selector(doExport), keyEquivalent: "")
         exp.target = self
         menu.addItem(exp)
+        let bak = NSMenuItem(title: "立即备份", action: #selector(doBackupNow), keyEquivalent: "")
+        bak.target = self
+        menu.addItem(bak)
+        let chk = NSMenuItem(title: "备份自检…", action: #selector(doBackupCheck), keyEquivalent: "")
+        chk.target = self
+        menu.addItem(chk)
+        let res = NSMenuItem(title: "恢复备份…", action: #selector(doRestore), keyEquivalent: "")
+        res.target = self
+        menu.addItem(res)
         let folder = NSMenuItem(title: "打开数据文件夹", action: #selector(openDataFolder), keyEquivalent: "")
         folder.target = self
         menu.addItem(folder)
@@ -137,6 +147,47 @@ extension AppDelegate {
     }
 
     // MARK: 数据：导出 / 打开 / 清空
+
+    @objc func doBackupNow() {
+        store.backupNow("manual")
+        nativeToast("已备份")
+    }
+
+    @objc func doBackupCheck() {
+        let r = store.review()
+        let a = NSAlert()
+        a.messageText = r.passed ? "备份自检 7/7" : "备份自检有问题"
+        a.informativeText = r.lines.joined(separator: "\n")
+        a.addButton(withTitle: "好")
+        a.runModal()
+    }
+
+    @objc func doRestore() {
+        let backups = store.backupFileList()
+        guard !backups.isEmpty else { nativeToast("还没有备份"); return }
+        let a = NSAlert()
+        a.messageText = "恢复备份？"
+        a.informativeText = "会先把当前账本备份一次，再用选中的备份覆盖。"
+        a.addButton(withTitle: "选择备份…")
+        a.addButton(withTitle: "取消")
+        guard a.runModal() == .alertFirstButtonReturn else { return }
+
+        let panel = NSOpenPanel()
+        panel.directoryURL = store.backupsURL
+        panel.allowedContentTypes = [.json]
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        panel.message = "选一份 backups/ 里的备份"
+        panel.begin { [weak self] resp in
+            guard let self = self, resp == .OK, let url = panel.url else { return }
+            let r = self.store.restore(from: url)
+            guard r.ok else { self.nativeToast("这份备份读不出来，没有恢复"); return }
+            let json = self.readStore()
+            self.webView?.evaluateJavaScript("window.__load && window.__load(\(json));", completionHandler: nil)
+            self.pushStoreStatus()
+            self.nativeToast("已恢复 · \(r.after) 件（恢复前 \(r.before) 件）")
+        }
+    }
 
     @objc func doExport() {
         exportViaPage { [weak self] ok in

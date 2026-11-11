@@ -12,6 +12,31 @@ autoreleasepool {
     }
 
 #if DEBUG
+    // 导出样例：把 exportPayload 写到指定路径，供外部解析验证（仅 DEBUG）
+    if let i = CommandLine.arguments.firstIndex(of: "--export"),
+       i + 1 < CommandLine.arguments.count {
+        let probe = AppDelegate()
+        if let data = probe.exportPayload() {
+            try? data.write(to: URL(fileURLWithPath: CommandLine.arguments[i + 1]))
+            exit(0)
+        }
+        exit(1)
+    }
+
+    // 备份审阅样例（仅 DEBUG）
+    if CommandLine.arguments.contains("--review") {
+        let probe = AppDelegate()
+        print(probe.backupReviewText())
+        exit(0)
+    }
+
+    // 诊断自证：把诊断文本打到 stdout，供 shell grep（仅 DEBUG）
+    if CommandLine.arguments.contains("--diag") {
+        let probe = AppDelegate()
+        print(probe.diagnosticText())
+        exit(0)
+    }
+
     // 夹具：重构前后各编一次，用同一份代码跑同一组场景，输出规范化 JSON 做字节比对。
     if let i = CommandLine.arguments.firstIndex(of: "--fixture"),
        i + 1 < CommandLine.arguments.count {

@@ -1,6 +1,7 @@
 import Cocoa
 import WebKit
 import UniformTypeIdentifiers
+import Darwin
 
 /* 全 app 的存储入口。真正的规则在 Store.swift；这里只做三件事：
    1. 把 Store 的结果翻译成界面能懂的状态；
@@ -140,8 +141,8 @@ extension AppDelegate {
         (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "0.0.0"
     }
 
-    /// 账本 + meta 段，原子写。
-    private func buildExport(to dest: URL, readme: String) -> Bool {
+    /// 账本 + meta 段。自检与导出面板共用。
+    func exportPayload() -> Data? {
         var obj: [String: Any] = [:]
         let raw = store.load().json
         if let d = raw.data(using: .utf8),
@@ -154,7 +155,7 @@ extension AppDelegate {
             }
         } else {
             NSLog("DeskTodo export: no readable ledger")
-            return false
+            return nil
         }
         obj["meta"] = [
             "exportedAt": ISO8601DateFormatter().string(from: Date()),
@@ -162,17 +163,63 @@ extension AppDelegate {
             "buildNumber": (Bundle.main.infoDictionary?["CFBundleVersion"] as? String) ?? "0",
             "schemaVersion": storeSchemaVersion
         ]
-        guard let data = try? JSONSerialization.data(withJSONObject: obj, options: [.sortedKeys, .prettyPrinted]) else {
+        return try? JSONSerialization.data(withJSONObject: obj, options: [.sortedKeys, .prettyPrinted])
+    }
+
+    /// 写盘 + 导出成功后触发一次备份。
+    private func buildExport(to dest: URL, readme: String) -> Bool {
+        guard let data = exportPayload() else {
+            NSLog("DeskTodo export: no payload")
             return false
         }
         do {
             try data.write(to: dest, options: .atomic)
+            store.backupNow("export")
             NSLog("DeskTodo export ok")
             return true
         } catch {
             NSLog("DeskTodo export failed")
             return false
         }
+    }
+
+    func backupReviewText() -> String {
+        store.review().lines.joined(separator: "\n")
+    }
+
+    /// 诊断信息：只有版本、构建、系统、架构、备份审阅结果和最近 50 行日志。
+    /// 用户名、邮箱、临时目录在代码里脱敏；不含任何任务内容。
+    func diagnosticText() -> String {
+        var arch = "unknown"
+        var uts = utsname()
+        if uname(&uts) == 0 {
+            arch = withUnsafePointer(to: &uts.machine) {
+                $0.withMemoryRebound(to: CChar.self, capacity: 1) { String(cString: $0) }
+            }
+        }
+        var text = "DeskTodo 诊断\n"
+        text += "版本：\(appVersion)（构建 \((Bundle.main.infoDictionary?["CFBundleVersion"] as? String) ?? "0")）\n"
+        text += "系统：\(ProcessInfo.processInfo.operatingSystemVersionString)  架构：\(arch)\n"
+        let ledger = store.load().json
+        let n = (try? JSONSerialization.jsonObject(with: Data(ledger.utf8))) as? [String: Any]
+        let count = (n?["nodes"] as? [Any])?.count ?? 0
+        text += "账本：\(count) 条 · 备份 \(store.backupFileList().count) 份 · 快照 \(snapshotCount())\n"
+        text += "备份审阅：\n\(backupReviewText())\n"
+        text += "最近日志（50 行）：\n"
+        text += store.logTail(50).joined(separator: "\n")
+        return sanitize(text)
+    }
+
+    private func sanitize(_ s: String) -> String {
+        var t = s
+        t = t.replacingOccurrences(of: #"/Users/[^/\s]+"#, with: "/Users/<user>", options: .regularExpression)
+        t = t.replacingOccurrences(of: #"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b"#, with: "<email>", options: .regularExpression)
+        t = t.replacingOccurrences(of: #"/var/folders/[^\s]+"#, with: "<tmp>", options: .regularExpression)
+        return t
+    }
+
+    func snapshotCount() -> Int {
+        ((try? FileManager.default.contentsOfDirectory(atPath: snapshotDir.path)) ?? []).filter { $0.hasSuffix(".json") }.count
     }
 
     func exportViaPage(completion: @escaping (Bool) -> Void) {
@@ -263,6 +310,57 @@ extension AppDelegate {
         check("迁移生成新账本", FileManager.default.fileExists(atPath: migrated.ledgerURL.path))
         check("迁移保留原文件", FileManager.default.fileExists(atPath: legacyFile.path))
         try? FileManager.default.removeItem(at: mig)
+
+        // 导出：可被自身解析，条数一致
+        let payload = exportPayload()
+        let parsed = payload.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
+        let exportNodes = (parsed?["nodes"] as? [Any])?.count ?? -1
+        let meta = parsed?["meta"] as? [String: Any]
+        check("导出可被本身解析", parsed != nil)
+        check("导出条数与原数据一致", exportNodes == 1)
+        check("导出带 meta", meta?["appVersion"] != nil && meta?["schemaVersion"] != nil)
+
+        // 备份审阅 7 项
+        let review = store.review()
+        check("审阅是 7 项", review.lines.count == 7)
+        check("审阅全部通过", review.passed)
+
+        // 诊断信息：无任务内容、无用户名/邮箱/临时目录
+        try? Data("{\"v\":2,\"nodes\":[{\"id\":1,\"type\":\"task\",\"text\":\"待办XYZ\"}]}".utf8).write(to: storeURL)
+        _ = store.load()
+        try? FileManager.default.createDirectory(at: store.logsURL, withIntermediateDirectories: true)
+        let fakePath = "/Users/" + "alice/work" + " a@b.com /var/folders/zz/T/x\n"
+        try? Data(fakePath.utf8).write(to: store.logURL)
+        let diag = diagnosticText()
+        check("诊断不含任务内容", !diag.contains("待办") && !diag.contains("title") && !diag.contains("task"))
+        let leak = diag.range(of: #"/Users/[a-z]"#, options: .regularExpression) != nil
+        check("诊断已脱敏用户名", !leak && diag.contains("<user>"))
+        check("诊断已脱敏邮箱", !diag.contains("a@b.com") && diag.contains("<email>"))
+        check("诊断已脱敏临时目录", !diag.contains("/var/folders/"))
+
+        // 恢复：先备份当前，再写回
+        store.backupNow("test")
+        let target = store.backupFileList().last.map { store.backupsURL.appendingPathComponent($0) }
+        var restored = false
+        if let u = target {
+            try? Data("{\"v\":2,\"nodes\":[]}".utf8).write(to: storeURL)
+            _ = store.load()
+            let r = store.restore(from: u)
+            restored = r.ok && r.after >= 0
+        }
+        check("恢复备份可用", restored)
+
+        // 篡改拦截：改一份备份，审阅第 5 项应拦下
+        if let u = store.backupFileList().last.map({ store.backupsURL.appendingPathComponent($0) }),
+           let h = try? FileHandle(forWritingTo: u) {
+            h.seekToEndOfFile()
+            h.write(Data("x".utf8))
+            try? h.close()
+            let tampered = store.review()
+            check("篡改被第 5 项拦下", !tampered.passed && tampered.lines.contains { $0.contains("tampered") })
+        } else {
+            check("篡改被第 5 项拦下", false)
+        }
 
         // 清空
         try? Data("{\"2026-01-01\":{}}".utf8).write(to: store.focusURL)

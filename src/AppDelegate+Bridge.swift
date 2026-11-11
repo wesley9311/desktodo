@@ -221,16 +221,10 @@ extension AppDelegate {
        任务内容、日历标题、文件名、app 名一个都不带。
        体验官直接粘进聊天窗口就行，不需要"上传日志"。 */
     func copyDiagToPasteboard() {
-        guard let wv = webView else { return }
-        wv.evaluateJavaScript("window.__diagText ? window.__diagText() : ''") { [weak self] val, _ in
-            guard let self = self else { return }
-            let v = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
-            var text = (val as? String) ?? "（诊断信息没生成出来）"
-            text = "版本：\(v) · \(self.isCollapsed ? "收起" : "展开")\n" + text
-            let pb = NSPasteboard.general
-            pb.clearContents()
-            pb.setString(text, forType: .string)
-            self.nativeToast("诊断信息已复制（不含任何内容）")
-        }
+        let text = diagnosticText()
+        let pb = NSPasteboard.general
+        pb.clearContents()
+        pb.setString(text, forType: .string)
+        nativeToast("诊断信息已复制（不含任何内容）")
     }
 }

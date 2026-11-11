@@ -1,4 +1,5 @@
 import Cocoa
+import CryptoKit
 
 /* 存储层：唯一知道数据放哪、怎么写、怎么备份、怎么删的地方。
    四个约束：
@@ -34,6 +35,7 @@ final class Store {
     private var knownMtime: Date?
     private var knownSize: Int = -1
     private var readOnly = false
+    private var usedBackupNames = Set<String>()
     private let version = (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "dev"
 
     private let stampFmt: DateFormatter = {
@@ -91,7 +93,9 @@ final class Store {
             guard fm.fileExists(atPath: src.path) else { continue }
             let mtime = (try? fm.attributesOfItem(atPath: src.path))?[.modificationDate] as? Date ?? Date()
             let dst = backupsURL.appendingPathComponent("ledger.bak.\(stampFmt.string(from: mtime)).json")
-            if !fm.fileExists(atPath: dst.path), (try? fm.copyItem(at: src, to: dst)) != nil {
+            let dst2 = fm.fileExists(atPath: dst.path)
+                ? backupsURL.appendingPathComponent("ledger.bak.\(stampFmt.string(from: mtime))-2.json") : dst
+            if !fm.fileExists(atPath: dst2.path), (try? fm.copyItem(at: src, to: dst2)) != nil {
                 NSLog("DeskTodo store: migrated from legacy#2")
             }
         }
@@ -236,6 +240,7 @@ final class Store {
             }
             if atomicWrite(data, to: ledgerURL) {
                 refreshKnown()
+                refreshIndexLocked()
                 result = .ok
             } else {
                 result = .rejected
@@ -251,7 +256,7 @@ final class Store {
         let key = "backupOnceVersion"
         if UserDefaults.standard.string(forKey: key) == version { return }
         if let data = try? Data(contentsOf: ledgerURL) {
-            let dst = backupsURL.appendingPathComponent("ledger.bak.\(stampFmt.string(from: Date())).json")
+            let dst = nextBackupURL()
             if atomicWrite(data, to: dst) {
                 UserDefaults.standard.set(version, forKey: key)
                 NSLog("DeskTodo store: backup before first write")
@@ -261,15 +266,14 @@ final class Store {
 
     private func rotateBackups() {
         let fm = FileManager.default
-        guard let all = try? fm.contentsOfDirectory(atPath: backupsURL.path) else { return }
-        let names = all.filter { $0.hasPrefix("ledger.bak.") && $0.hasSuffix(".json") }.sorted()
+        let names = backupFileList()
         if names.count >= 5 {
             for n in names.prefix(names.count - 4) {
                 try? fm.removeItem(at: backupsURL.appendingPathComponent(n))
             }
         }
         if let data = try? Data(contentsOf: ledgerURL) {
-            _ = atomicWrite(data, to: backupsURL.appendingPathComponent("ledger.bak.\(stampFmt.string(from: Date())).json"))
+            _ = atomicWrite(data, to: nextBackupURL())
         }
     }
 
@@ -292,13 +296,7 @@ final class Store {
         }
     }
 
-    private func newestBackup() -> URL? {
-        let fm = FileManager.default
-        guard let all = try? fm.contentsOfDirectory(atPath: backupsURL.path) else { return nil }
-        let names = all.filter { $0.hasPrefix("ledger.bak.") && $0.hasSuffix(".json") }.sorted()
-        guard let last = names.last else { return nil }
-        return backupsURL.appendingPathComponent(last)
-    }
+    private func newestBackup() -> URL? { backupURLs().last }
 
     func backupFiles() -> [URL] {
         let fm = FileManager.default
@@ -316,19 +314,212 @@ final class Store {
     func backupNow(_ reason: String) {
         queue.sync {
             guard let data = try? Data(contentsOf: ledgerURL) else { return }
-            let dst = backupsURL.appendingPathComponent("ledger.bak.\(stampFmt.string(from: Date())).json")
+            let dst = nextBackupURL()
             _ = atomicWrite(data, to: dst)
             let fm = FileManager.default
-            if let all = try? fm.contentsOfDirectory(atPath: backupsURL.path) {
-                let names = all.filter { $0.hasPrefix("ledger.bak.") && $0.hasSuffix(".json") }.sorted()
-                if names.count > 5 {
-                    for n in names.prefix(names.count - 5) {
-                        try? fm.removeItem(at: backupsURL.appendingPathComponent(n))
-                    }
+            let names = backupFileList()
+            if names.count > 5 {
+                for n in names.prefix(names.count - 5) {
+                    try? fm.removeItem(at: backupsURL.appendingPathComponent(n))
                 }
             }
+            refreshIndexLocked()
             NSLog("DeskTodo store: backup (\(reason))")
         }
+    }
+
+
+    // MARK: - 备份索引与审阅
+
+    private var indexURL: URL { backupsURL.appendingPathComponent("index.json") }
+
+    private func sha256Hex(_ data: Data) -> String {
+        SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+    }
+
+    private func entryCount(of json: String) -> Int {
+        guard let d = json.data(using: .utf8),
+              let o = try? JSONSerialization.jsonObject(with: d) as? [String: Any] else { return -1 }
+        if let n = o["nodes"] as? [Any] { return n.count }
+        if let t = o["tasks"] as? [Any] { return t.count }
+        return 0
+    }
+
+    private func fileDate(_ url: URL) -> Date {
+        ((try? FileManager.default.attributesOfItem(atPath: url.path))?[.modificationDate] as? Date) ?? Date()
+    }
+
+    func loadIndex() -> [BackupEntry] {
+        guard let d = try? Data(contentsOf: indexURL),
+              let idx = try? JSONDecoder().decode([String: [BackupEntry]].self, from: d),
+              let list = idx["entries"] else { return [] }
+        return list
+    }
+
+    private func saveIndex(_ list: [BackupEntry]) {
+        guard let data = try? JSONEncoder().encode(["entries": list]) else { return }
+        _ = atomicWrite(data, to: indexURL)
+    }
+
+    /// 索引只记 hash、字节数、条数、时间；不记任何内容。
+    func refreshIndex() {
+        queue.sync { refreshIndexLocked() }
+    }
+
+    private func refreshIndexLocked() {
+        do {
+            let files = backupFileList()
+            let old = Dictionary(uniqueKeysWithValues: loadIndex().map { ($0.file, $0) })
+            var list: [BackupEntry] = []
+            for f in files {
+                let u = backupsURL.appendingPathComponent(f)
+                guard let d = try? Data(contentsOf: u) else { continue }
+                let s = String(data: d, encoding: .utf8) ?? ""
+                let hash = sha256Hex(d)
+                var e = old[f] ?? BackupEntry(file: f, sha256: hash, bytes: d.count,
+                                              entries: entryCount(of: s),
+                                              createdAt: ISO8601DateFormatter().string(from: fileDate(u)))
+                if e.sha256 != hash { e.status = "tampered" }
+                list.append(e)
+            }
+            saveIndex(list)
+        }
+    }
+
+    private func nextBackupURL() -> URL {
+        let base = "ledger.bak.\(stampFmt.string(from: Date()))"
+        var name = "\(base).json"
+        var i = 2
+        while usedBackupNames.contains(name) || FileManager.default.fileExists(atPath: backupsURL.appendingPathComponent(name).path) {
+            name = "\(base)-\(i).json"
+            i += 1
+        }
+        usedBackupNames.insert(name)
+        return backupsURL.appendingPathComponent(name)
+    }
+
+    private func backupURLs() -> [URL] {
+        let fm = FileManager.default
+        guard let all = try? fm.contentsOfDirectory(atPath: backupsURL.path) else { return [] }
+        let urls = all.filter { $0.hasPrefix("ledger.bak.") && $0.hasSuffix(".json") }
+            .map { backupsURL.appendingPathComponent($0) }
+        return urls.sorted { a, b in
+            let da = fileDate(a), db = fileDate(b)
+            if abs(da.timeIntervalSince(db)) < 0.001 { return a.lastPathComponent < b.lastPathComponent }
+            return da < db
+        }
+    }
+
+    func backupFileList() -> [String] { backupURLs().map { $0.lastPathComponent } }
+
+    /// 恢复：先备份当前账本，再写回选中备份。
+    func restore(from url: URL) -> (before: Int, after: Int, ok: Bool) {
+        var result = (before: 0, after: 0, ok: false)
+        queue.sync {
+            guard let d = try? Data(contentsOf: url),
+                  let s = String(data: d, encoding: .utf8), isValid(s) else { return }
+            let before = (try? String(contentsOf: ledgerURL, encoding: .utf8)).map { entryCount(of: $0) } ?? 0
+            if let cur = try? Data(contentsOf: ledgerURL) {
+                let dst = nextBackupURL()
+                _ = atomicWrite(cur, to: dst)
+            }
+            guard atomicWrite(d, to: ledgerURL) else { return }
+            refreshKnown()
+            refreshIndexLocked()
+            result = (before, entryCount(of: s), true)
+        }
+        return result
+    }
+
+    /// 七项自动审阅：只报计数与状态，不报内容。
+    func review() -> BackupReview {
+        var r = BackupReview()
+        let fm = FileManager.default
+        refreshIndex()
+
+        // 1 目录可写
+        let probe = dir.appendingPathComponent(".write-probe")
+        let writable = (try? Data("x".utf8).write(to: probe)) != nil
+        try? fm.removeItem(at: probe)
+        r.lines.append("1/7 目录可写 " + (writable ? "✓" : "✗"))
+
+        // 2 备份数 ≤ 5（超出删最旧后重算）
+        var files = backupFileList()
+        if files.count > 5 {
+            for n in files.prefix(files.count - 5) {
+                try? fm.removeItem(at: backupsURL.appendingPathComponent(n))
+            }
+            files = backupFileList()
+            refreshIndex()
+        }
+        r.lines.append("2/7 备份数 \(files.count)/5 " + (files.count <= 5 ? "✓" : "✗"))
+
+        // 3 最新备份可解析
+        let newest = files.last.map { backupsURL.appendingPathComponent($0) }
+        let newestJSON = newest.flatMap { try? String(contentsOf: $0, encoding: .utf8) }
+        let newestOK = newestJSON.map { isValid($0) } ?? false
+        r.lines.append("3/7 最新备份可解析 " + (newestOK ? "✓" : (files.isEmpty ? "—（还没有备份）" : "✗")))
+
+        // 4 最新备份条数 = 当前账本（不一致则立即补一份）
+        let current = (try? String(contentsOf: ledgerURL, encoding: .utf8)) ?? ""
+        let curN = entryCount(of: current)
+        var newestN = newestJSON.map { entryCount(of: $0) } ?? -1
+        var matched = (curN == newestN)
+        if !matched, curN > 0 {
+            backupNow("auto")
+            files = backupFileList()
+            if let last = files.last, let s = try? String(contentsOf: backupsURL.appendingPathComponent(last), encoding: .utf8) {
+                newestN = entryCount(of: s)
+            }
+            matched = (curN == newestN)
+        }
+        r.lines.append("4/7 最新备份条数 = 当前账本（\(curN)） " + (matched ? "✓" : "✗"))
+
+        // 5 sha256 与索引一致（不一致标记 tampered，不删除）
+        let idx = loadIndex()
+        var tampered = 0
+        for e in idx where e.status == "tampered" { tampered += 1 }
+        if tampered == 0 {
+            for f in backupFileList() {
+                let u = backupsURL.appendingPathComponent(f)
+                guard let d = try? Data(contentsOf: u) else { continue }
+                if let e = idx.first(where: { $0.file == f }), e.sha256 != sha256Hex(d) { tampered += 1 }
+            }
+        }
+        r.lines.append("5/7 备份未被篡改 " + (tampered == 0 ? "✓" : "✗（\(tampered) 份标记 tampered）"))
+
+        // 6 账本非空但备份缺失 → 立即补一份
+        var missing = (curN > 0 && backupFileList().isEmpty)
+        if missing {
+            backupNow("auto")
+            missing = backupFileList().isEmpty
+        }
+        r.lines.append("6/7 账本非空时有备份 " + (missing ? "✗" : "✓"))
+
+        // 7 最新备份超过 30 天提醒
+        var stale = false
+        if let u = backupFileList().last.map({ backupsURL.appendingPathComponent($0) }) {
+            stale = Date().timeIntervalSince(fileDate(u)) > 30 * 86400
+        }
+        r.lines.append("7/7 最新备份在 30 天内 " + (stale ? "✗（备份 30 天未更新）" : "✓"))
+
+        return r
+    }
+
+    func indexReport() -> [String] {
+        queue.sync {
+            loadIndex().map { e in
+                let u = backupsURL.appendingPathComponent(e.file)
+                let d = (try? Data(contentsOf: u)) ?? Data()
+                let h = sha256Hex(d)
+                return "\(e.file) status=\(e.status ?? "-") match=\(h == e.sha256) bytes=\(d.count)/\(e.bytes)"
+            }
+        }
+    }
+
+    func logTail(_ n: Int) -> [String] {
+        guard let s = try? String(contentsOf: logURL, encoding: .utf8) else { return [] }
+        return String(s).split(separator: "\n", omittingEmptySubsequences: false).map(String.init).suffix(n).map { $0 }
     }
 
     // MARK: - 清空
@@ -401,4 +592,18 @@ final class Store {
             return false
         }
     }
+}
+
+struct BackupEntry: Codable {
+    var file: String
+    var sha256: String
+    var bytes: Int
+    var entries: Int
+    var createdAt: String
+    var status: String?
+}
+
+struct BackupReview {
+    var lines: [String] = []
+    var passed: Bool { !lines.contains { $0.contains("✗") } }
 }
