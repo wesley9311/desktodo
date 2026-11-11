@@ -139,13 +139,13 @@ GN=".gitignore"
 if [ -f "$GN" ] \
    && grep -qE '^build/' "$GN" \
    && grep -qE '^dist/' "$GN" \
-   && grep -qE 'data\.json' "$GN" \
+   && grep -qE 'data\*?\.json' "$GN" \
    && grep -qE 'data\.conflict-' "$GN" \
    && grep -qE 'snapshots/' "$GN" \
    && grep -qE 'keychain' "$GN"; then
   pass ".gitignore 覆盖构建产物 / 导出包 / 数据 / 备份快照 / 钥匙串"
 else
-  fail ".gitignore 不完整（至少要挡 build/ dist/ data.json data.conflict-* snapshots/ *.keychain*）"
+  fail ".gitignore 不完整（至少要挡 build/ dist/ data*.json* data.conflict-* snapshots/ *.keychain*）"
 fi
 
 # ─────────────────────────────────────────────────────────────

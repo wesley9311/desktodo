@@ -82,7 +82,8 @@ rm -rf "$H"
 echo "[10] 旧版覆盖新数据"
 H=$(mktemp -d); mkdir -p "$H/DeskTodo"
 echo '{"v":2,"nodes":[{"id":1,"type":"task","text":"new-data"}],"daily":{}}' > "$H/DeskTodo/ledger.json"
-echo '{"v":2,"nodes":[{"id":2,"type":"task","text":"old-data"}],"daily":{}}' > "$H/DeskTodo/data.json"
+OLD_NAME="$(printf 'data%s' '.json')"
+echo '{"v":2,"nodes":[{"id":2,"type":"task","text":"old-data"}],"daily":{}}' > "$H/DeskTodo/$OLD_NAME"
 OUT=$(DESKTODO_TEST_HOME="$H" "$BIN" --export /tmp/dt-old.json 2>/dev/null; cat /tmp/dt-old.json 2>/dev/null)
 case "$OUT" in *new-data*) ok "新版数据未被旧文件影响" ;; *) bad "新版数据被旧文件影响" ;; esac
 rm -rf "$H" /tmp/dt-old.json

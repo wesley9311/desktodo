@@ -92,6 +92,7 @@ main.swift
 | 一键验证 | `./tools/verify.sh [--artifact <dmg>]` | 上面能自动化的全部 + 夹具金标 + 对抗审查 |
 | 对抗审查 | `./tools/adversarial.sh` | 只跑可自动化项；其余标 MANUAL/CI 与方法 |
 | 夹具金标 | `tools/fixtures/expected/*.json` | 10 组场景的规范化输出，`verify.sh` 逐个 diff |
+| Git 审查 | `./tools/git-audit.sh` | 工作区、四同步、措辞、提交规范、数据/密钥/产物、卫生 |
 
 **已知盲区**：断言全部在页面 DOM/逻辑层；原生窗口、浮窗、小圆点、菜单栏、桥协议没有运行时断言。不得用「断言通过」推断界面正常。
 

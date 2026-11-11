@@ -138,7 +138,7 @@ extension AppDelegate {
     }
 
     var appVersion: String {
-        (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "0.0.0"
+        (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "dev"
     }
 
     /// 账本 + meta 段。自检与导出面板共用。

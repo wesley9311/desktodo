@@ -67,6 +67,7 @@ tools/integrity.sh       产物完整性矩阵（9 项）
 tools/docs-check.sh      文档数字与实测一致
 tools/verify.sh          一键验证（审计 / 断言 / 自检 / 夹具 / 对抗）
 tools/adversarial.sh     18 项对抗审查里可自动化的部分
+tools/git-audit.sh       Git 对抗性审查（提交规范/标签/数据边界）
 ```
 
 ## 自己验证这份构建

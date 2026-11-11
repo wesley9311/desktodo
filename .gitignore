@@ -18,14 +18,18 @@ dist/
 *.mobileprovision
 
 # ── 真数据（在 ~/Library/Application Support/DeskTodo/，不该在这里） ──
-data.json
-data.json.bak
+data*.json*
 data.backup-*.json
 data.corrupt-*.json
 data.bak.corrupt-*.json
 data.conflict-*.json
 snapshots/
 focus.json
+ledger.json
+ledger.bak.*
+backups/
+logs/
+SHA256SUMS.txt
 *.export.json
 
 # ── 旧快照与调试残留 ────────────────────────────────────────
