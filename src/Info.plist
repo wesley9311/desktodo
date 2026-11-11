@@ -17,14 +17,14 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>0.5.0</string>
+	<string>0.1.0</string>
 	<key>CFBundleVersion</key>
-	<string>9</string>
+	<string>2026111101</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>12.0</string>
-	<key>LSUIElement</key>
-	<true/>
 	<key>LSMultipleInstancesProhibited</key>
+	<true/>
+	<key>LSUIElement</key>
 	<true/>
 	<key>NSCalendarsFullAccessUsageDescription</key>
 	<string>读取你日历里已有的事项，用来对照「这一天有会 / 没会」和实际完成量。只读，不上传。</string>

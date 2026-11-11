@@ -79,7 +79,7 @@ MINOS="$(vtool -show-build "$BIN" 2>/dev/null | awk '/minos/{print $2; exit}')"
 if [ "$MINOS" = "12.0" ]; then ok "minos 12.0"; else bad "minos=${MINOS}（期望 12.0）"; fi
 
 echo "[4] 无第三方链接"
-BADLIB="$(otool -L "$BIN" 2>/dev/null | awk 'NR>1{print $1}' | grep -vE '^(/System/|/usr/lib/)' || true)"
+BADLIB="$(otool -L "$BIN" 2>/dev/null | awk '/^\t/ {print $1}' | grep -vE '^(/System/|/usr/lib/)' || true)"
 if [ -z "$BADLIB" ]; then ok "只链接系统库"; else bad "存在非系统链接"; echo "$BADLIB" | while IFS= read -r l; do info "$l"; done; fi
 
 echo "[5] 无路径泄漏"

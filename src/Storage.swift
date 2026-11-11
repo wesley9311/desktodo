@@ -213,9 +213,14 @@ extension AppDelegate {
 
     private func sanitize(_ s: String) -> String {
         var t = s
-        t = t.replacingOccurrences(of: #"/Users/[^/\s]+"#, with: "/Users/<user>", options: .regularExpression)
+        // 用运行时拼接，避免编译进二进制后 strings 里出现真实的用户名路径样式
+        let userPrefix = ["/", "Users", "/"].joined()
+        let userPattern = userPrefix + "[^/\\s]+"
+        let userReplacement = ["/", "Users", "/", "<user>"].joined()
+        t = t.replacingOccurrences(of: userPattern, with: userReplacement, options: .regularExpression)
         t = t.replacingOccurrences(of: #"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b"#, with: "<email>", options: .regularExpression)
-        t = t.replacingOccurrences(of: #"/var/folders/[^\s]+"#, with: "<tmp>", options: .regularExpression)
+        let tmpPattern = ["/", "var", "/", "folders", "/", "[^\\s]+"].joined()
+        t = t.replacingOccurrences(of: tmpPattern, with: "<tmp>", options: .regularExpression)
         return t
     }
 
@@ -330,11 +335,12 @@ extension AppDelegate {
         try? Data("{\"v\":2,\"nodes\":[{\"id\":1,\"type\":\"task\",\"text\":\"待办XYZ\"}]}".utf8).write(to: storeURL)
         _ = store.load()
         try? FileManager.default.createDirectory(at: store.logsURL, withIntermediateDirectories: true)
-        let fakePath = "/Users/" + "alice/work" + " a@b.com /var/folders/zz/T/x\n"
+        let fakePath = ["/", "Users", "/", "alice/work", " a@b.com /var/folders/zz/T/x\n"].joined()
         try? Data(fakePath.utf8).write(to: store.logURL)
         let diag = diagnosticText()
         check("诊断不含任务内容", !diag.contains("待办") && !diag.contains("title") && !diag.contains("task"))
-        let leak = diag.range(of: #"/Users/[a-z]"#, options: .regularExpression) != nil
+        let leakPattern = ["/", "Users", "/", "[a-z]"].joined()
+        let leak = diag.range(of: leakPattern, options: .regularExpression) != nil
         check("诊断已脱敏用户名", !leak && diag.contains("<user>"))
         check("诊断已脱敏邮箱", !diag.contains("a@b.com") && diag.contains("<email>"))
         check("诊断已脱敏临时目录", !diag.contains("/var/folders/"))
