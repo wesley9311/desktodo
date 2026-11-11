@@ -85,7 +85,7 @@ elif [ "$ALLOW_ADHOC" = "1" ]; then
   echo "    ad-hoc 签名（--adhoc 显式要求）"
   echo "    !! cdhash 每次重建都变 → 日历/提醒/完全磁盘访问会被系统清零，需要重新授权"
 else
-  echo "!! 找不到固定证书「$SIGN_ID」（钥匙串：$SIGN_KEYCHAIN）"
+  echo "!! 找不到固定证书「${SIGN_ID}」（钥匙串：${SIGN_KEYCHAIN}）"
   echo "   先跑 tools/mkcert.sh 生成；确实要临时用 ad-hoc，传 --adhoc（会丢权限）"
   exit 1
 fi

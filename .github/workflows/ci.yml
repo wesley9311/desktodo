@@ -19,7 +19,7 @@ permissions:
 jobs:
   audit:
     name: 边界审计
-    runs-on: macos-latest
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
 
@@ -29,7 +29,7 @@ jobs:
 
   behavior:
     name: 行为断言
-    runs-on: macos-latest
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
 
@@ -57,7 +57,7 @@ jobs:
 
   build:
     name: 编译（不签名）
-    runs-on: macos-latest
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
 
@@ -71,7 +71,37 @@ jobs:
             src/*.swift \
             -framework Cocoa -framework WebKit -framework EventKit
           ls -lh build/DeskTodo-ci
+          vtool -show-build build/DeskTodo-ci | grep 'minos 12.0'
 
       # 不在这里签名、不在这里发 release：
       # 分发包必须由维护者在自己的机器上产出并贴 hash，
       # 否则"官方构建"这四个字就没有对应的责任主体。
+
+  build-intel:
+    name: 编译 x86_64
+    runs-on: macos-15-intel
+    steps:
+      - uses: actions/checkout@v4
+      - name: swiftc 交叉编译 + 自检 + minos
+        run: |
+          mkdir -p build
+          swiftc -O -whole-module-optimization -target x86_64-apple-macos12.0 \
+            -o build/DeskTodo-inci src/*.swift \
+            -framework Cocoa -framework WebKit -framework EventKit
+          TMPHOME="$(mktemp -d)"
+          DESKTODO_TEST_HOME="$TMPHOME" ./build/DeskTodo-inci --selftest
+          rm -rf "$TMPHOME"
+          vtool -show-build build/DeskTodo-inci | grep 'minos 12.0'
+
+  meta:
+    name: 版本一致性
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: VERSION / Info.plist / CHANGELOG
+        run: |
+          V="$(tr -d '[:space:]' < VERSION)"
+          P="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' src/Info.plist)"
+          test "$V" = "$P" || { echo "VERSION=$V Info.plist=$P"; exit 1; }
+          grep -q "^## $V " CHANGELOG.md || { echo "CHANGELOG 缺少 $V 条目"; exit 1; }
+          echo "版本一致：$V"
