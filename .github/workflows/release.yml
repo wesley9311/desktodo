@@ -103,6 +103,8 @@ jobs:
   release:
     name: 发布（Pre-release）
     needs: package
+    # 只有 tag 触发的运行才发布；workflow_dispatch 只做干跑
+    if: startsWith(github.ref, 'refs/tags/')
     runs-on: macos-15
     permissions:
       contents: write
