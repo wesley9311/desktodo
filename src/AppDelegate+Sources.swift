@@ -1,7 +1,7 @@
 import Cocoa
 import WebKit
 
-// 外部数据来源接线：日历 / 提醒事项 / 屏幕时间 / 年轮公告
+// 外部数据来源接线：日历 / 提醒事项 / 屏幕时间 / 年度公告
 extension AppDelegate {
 
     // MARK: 数据来源：日历 / 提醒事项 / 屏幕使用时间
@@ -279,7 +279,7 @@ extension AppDelegate {
         return (r.isEmpty ? "away" : r.joined(separator: "+")) + "(\(sec)s)"
     }
 
-    // MARK: 年轮公告（每年 12/20 - 次年 1/15 自动出现，这里可以提前看效果）
+    // MARK: 年度公告（每年 12/20 - 次年 1/15 自动出现，这里可以提前看效果）
 
     @objc func previewAnniversary() {
         if window?.isVisible != true { showMain() }

@@ -39,7 +39,7 @@
     var N = state.nodes.filter(function (n) { return n.type === 'task'; }).length;
     var openN = state.nodes.filter(function (n) { return n.type === 'task' && !n.done; }).length;
     var ds = dataStart();
-    /* 当前清单条数 和 历史累计完成数 是两回事：勾掉之后被"一键清除"删掉的条目
+    /* 当前清单条数 和 历史累计划掉数 是两回事：划掉之后被"一键清除"删掉的条目
        不再占 nodes，但 daily 账本里那几件仍然算数。两个数分开写，
        否则读者会以为对不上。 */
     var ledger = 0;
@@ -51,8 +51,8 @@
     L.push('');
     L.push('导出时间：' + stampNow() + '  ');
     L.push('格式版本：' + SCHEMA_V + '（对应 data.json 里的 `v`）  ');
-    L.push('当前清单：' + N + ' 条' + (openN === N ? '，都还没做完' : '，其中 ' + openN + ' 条还没做完') + '  ');
-    L.push('历史累计完成：' + ledger + ' 件（按 `daily` 账本；含已经从清单里清掉的）  ');
+    L.push('当前清单：' + N + ' 件' + (openN === N ? '，都还没做完' : '，其中 ' + openN + ' 件还没做完') + '  ');
+    L.push('历史累计划掉：' + ledger + ' 件（按 `daily` 账本；含已经从清单里清掉的）  ');
     L.push('记录起点：' + (ds ? dayKey(ds) : '还没有记录'));
     L.push('');
     L.push('这个压缩包里有两样东西：');
@@ -69,7 +69,7 @@
     if (years.length) {
       L.push('## 每年');
       L.push('');
-      L.push('| 年份 | 完成 | 有产出的天 | 看得见的天 | 最长连续 |');
+      L.push('| 年份 | 划掉 | 有产出的天 | 看得见的天 | 最长连续 |');
       L.push('| --- | --- | --- | --- | --- |');
       years.forEach(function (y) {
         var r = yearStats(+y);
@@ -78,8 +78,8 @@
           + ' | ' + (r.longest >= 2 ? r.longest + ' 天' : '—') + ' |');
       });
       L.push('');
-      L.push('「看得见的天」= 那天这个 app 开着，或者有过操作，或者有完成记录。');
-      L.push('「有产出的天」= 那天至少勾掉一件。这两个数不一样时，');
+      L.push('「看得见的天」= 那天这个 app 开着，或者有过操作，或者有划掉记录。');
+      L.push('「有产出的天」= 那天至少划掉一件。这两个数不一样时，');
       L.push('任何"平均每天多少"都该用「看得见的天」当分母，而不是日历天数。');
       L.push('');
 
@@ -91,7 +91,7 @@
       if (ds && new Date(ds).getFullYear() === curY) fromM = new Date(ds).getMonth();
       L.push('## 按月（' + curY + '）');
       L.push('');
-      L.push('| 月 | 完成 | 有记录的天 |');
+      L.push('| 月 | 划掉 | 有记录的天 |');
       L.push('| --- | --- | --- |');
       for (var m = fromM; m < 12; m++) {
         var ob = mobs[m] || 0;
@@ -104,12 +104,12 @@
     /* ---------- 清单 ---------- */
     var open = state.nodes.filter(function (n) { return n.type === 'task' && !n.done; });
     if (open.length) {
-      L.push('## 导出时还没做完的（' + open.length + ' 条）');
+      L.push('## 导出时还没做完的（' + open.length + ' 件）');
       L.push('');
       open.slice(0, 60).forEach(function (n) {
         L.push('- ' + String(n.text || '').replace(/\n/g, ' '));
       });
-      if (open.length > 60) L.push('- …还有 ' + (open.length - 60) + ' 条');
+      if (open.length > 60) L.push('- …还有 ' + (open.length - 60) + ' 件');
       L.push('');
       L.push('这里只列标题。项目名、文件路径、提醒时间都在 data.json 里。');
       L.push('');
@@ -121,10 +121,10 @@
     L.push('| 键 | 含义 |');
     L.push('| --- | --- |');
     L.push('| `v` | 格式版本。加字段只加不改，这个数跟着走 |');
-    L.push('| `nodes` | 全部条目（任务、项目、文件节点）。`done` 是完成标记 |');
+    L.push('| `nodes` | 全部条目（任务、项目、文件节点）。`done` 是划掉标记 |');
     L.push('| `seq` | 下一个条目 id。清空数据后会回到 1 |');
-    L.push('| `daily` | `{"日期": 完成件数}`。是**账本**，只累加，不回改 |');
-    L.push('| `log` | 最近 60 天的完成明细 `{id, at, d, p}`（`p` = 完成时挂的项目 id）。只用来算"什么时段出活" |');
+    L.push('| `daily` | `{"日期": 划掉件数}`。是**账本**，只累加，不回改 |');
+    L.push('| `log` | 最近 60 天的划掉明细 `{id, at, d, p}`（`p` = 划掉时挂的项目 id）。只用来算"什么时段出活" |');
     L.push('| `flow` | `{"日期": {n: 新写, x: 删掉（当时没做完）, q: 认赔（销账）}}` 当天的进出流水 |');
     L.push('| `seen` | `{"日期": 1}` 这天应用开着。**没有这个键不代表 0 件**；永久保留，不裁剪 |');
     L.push('| `seenFrom` | 从哪天开始能判断"这天有没有记录" |');
@@ -135,7 +135,7 @@
     L.push('| `vote` | 哪个月投过哪句"准/不准"（每句每月只投一次） |');
     L.push('| `hide` / `fb` / `saidN` | 你否掉过的来源行、纠正记录、判断句被说"不准"的累计次数 |');
     L.push('| `byProj` | 按项目汇总的件数（记的是项目 id，项目改名会跟着变） |');
-    L.push('| `anniv` | 哪一年的年轮公告看过了 |');
+    L.push('| `anniv` | 哪一年的年度公告看过了 |');
     L.push('');
     L.push('同目录还有一个 `focus.json`：前台 App 计时（只留最近 7 天），');
     L.push('它和 `data.json` 一起打进了这个压缩包。');
@@ -232,9 +232,9 @@
     var projs = state.nodes.filter(function (n) { return n.type === 'project'; });
     var ledger = 0, dm = dailyMap();
     Object.keys(dm).forEach(function (k) { ledger += (dm[k] || 0); });
-    L.push('清单：' + tasks.length + ' 条任务（未完成 ' + tasks.filter(function (n) { return !n.done; }).length + '）'
+    L.push('清单：' + tasks.length + ' 件任务（未划掉 ' + tasks.filter(function (n) { return !n.done; }).length + '）'
       + ' · 项目 ' + projs.length + ' 个');
-    L.push('账本：累计完成 ' + ledger + ' 件 · 有记录的天 ' + Object.keys(dm).length
+    L.push('账本：累计划掉 ' + ledger + ' 件 · 有记录的天 ' + Object.keys(dm).length
       + ' · seen ' + Object.keys(state.seen || {}).length + ' 天');
     L.push('记录起点：' + (dataStart() ? dayKey(dataStart()) : '无'));
     L.push('');

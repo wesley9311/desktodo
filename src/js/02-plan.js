@@ -1,5 +1,5 @@
   /* ---------------- 今天 / 明天 / 后天：自动接续的日程 ----------------
-     未完成的活过夜自动继承到第二天；当天全部勾完后，收起态自动接到下一天。 */
+     未划掉的活过夜自动继承到第二天；当天全部勾完后，收起态自动接到下一天。 */
 
   function dayStart(ts) {
     var d = new Date(ts);
@@ -65,9 +65,9 @@
     var t0 = todayStart();
     var tasks = state.nodes.filter(function (n) { return n.type === 'task'; });
     var undone = tasks.filter(function (n) { return !n.done; });
-    // 今天已经做掉几件：收起态也要能看出"今天完成了什么、明天接什么"。
-    // 必须走 dayDone（daily 账本，记的是"哪天勾掉的"），不能用 due 反推：
-    // 一件昨天到期、今天才勾掉的任务，due 仍是昨天，按 due 数就会漏掉。
+    // 今天已经做掉几件：收起态也要能看出"今天划掉了什么、明天接什么"。
+    // 必须走 dayDone（daily 账本，记的是"哪天划掉的"），不能用 due 反推：
+    // 一件昨天到期、今天才划掉的任务，due 仍是昨天，按 due 数就会漏掉。
     var todayDone = dayDone(t0);
 
     var todayLeft = undone.filter(function (n) { return n.due <= t0; }).sort(taskCmp);
@@ -127,9 +127,9 @@
     render();
     var info = agendaInfo();
     if (!info.list.length) {
-      agendaFlash('全部都完成了 · 明天见');
+      agendaFlash('都划掉了 · 明天见');
     } else if (dayStart(info.day) > todayStart()) {
-      agendaFlash('今天完成 · 已接上' + agendaShort(info.day) + '，还剩 ' + info.list.length + ' 件');
+      agendaFlash('今天划完 · 已接上' + agendaShort(info.day) + '，还剩 ' + info.list.length + ' 件');
     } else {
       agendaFlash('还剩 ' + info.list.length + ' 件');
     }
@@ -142,7 +142,7 @@
 
     var chk = document.createElement('div');
     chk.className = 'check';
-    chk.title = '勾掉这件';
+    chk.title = '划掉这件';
     chk.addEventListener('click', function (e) { e.stopPropagation(); agendaToggle(t.id); });
     row.appendChild(chk);
 
@@ -198,7 +198,7 @@
 
   /* ---------------- 日结：每天第一次打开，先把昨天结一句 ----------------
      只报「昨天结了 N 件」——daily 账本里有据可查，用户能自己数回来。
-     不报「昨天欠了几件」：历史上的未完成数没法从 data.json 可靠重建
+     不报「昨天欠了几件」：历史上的未划掉数没法从 data.json 可靠重建
      （任务会被删、会被顺延、会被销账），编一个看起来像真的数，比不报恶劣得多。
      今天欠多少，在下面的「欠账」里另算——那是还活着的任务，不是历史。 */
   /* 「哪天已经给看过」存在 state.settle 里（会写盘）。
@@ -282,11 +282,11 @@
       var wv = document.createElement('button');
       wv.className = 'd-wv';
       wv.textContent = '销账';
-      wv.title = '记一笔放弃：不算完成，也不再欠着';
+      wv.title = '记一笔放弃：不算划掉，也不再欠着';
       wv.addEventListener('click', function (e) {
         e.stopPropagation();
         removeNode(t.id, 'writeoff');   // 认赔记一笔 q，跟"我不想要了"分开
-        toast('已销账 · 不算完成');
+        toast('已销账 · 不算划掉');
       });
 
       row.appendChild(n);
@@ -298,7 +298,7 @@
 
     var note = document.createElement('div');
     note.className = 'd-note';
-    note.textContent = '销账 = 认下这件不做了。不算完成，也不再欠着。';
+    note.textContent = '销账 = 认下这件不做了。不算划掉，也不再欠着。';
     host.appendChild(note);
   }
 
@@ -340,7 +340,7 @@
     if (doneToday) bits.push('今日已做 ' + doneToday);
     var hasAny = state.nodes.some(function (n) { return n.type === 'task'; });
     if (bits.length) meta.textContent = bits.join(' · ');
-    else meta.textContent = hasAny ? '已全部完成' : '还没有待办';
+    else meta.textContent = hasAny ? '已全部划掉' : '还没有待办';
     if (info.nextDay && total) meta.title = '今天的都做完了，已自动接到' + agendaShort(info.day);
     head.appendChild(day);
     head.appendChild(meta);
@@ -397,8 +397,8 @@
       var em = document.createElement('div');
       em.className = 'a-empty';
       em.textContent = hasAny
-        ? (doneToday ? '今日已完成 ' + doneToday + ' 件 · 明天见' : '这一天的都做完了 · 展开看全部')
-        : '点箭头展开，写第一条待办';
+        ? (doneToday ? '今日已划掉 ' + doneToday + ' 件 · 明天见' : '这一天的都划掉了 · 展开看全部')
+        : '点箭头展开，写第一件';
       host.appendChild(em);
       trimForExpanded(host);
       return;

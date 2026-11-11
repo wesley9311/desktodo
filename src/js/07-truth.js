@@ -92,7 +92,7 @@
     var d = document.createElement('div');
     d.className = 'r-fb';
     d.setAttribute('data-for', btn.getAttribute('data-q'));
-    d.innerHTML = '<span>这条不对？</span>'
+    d.innerHTML = '<span>这行不对？</span>'
       + '<button data-fb="wrong">数不对</button>'
       + '<button data-fb="hide">不该显示</button>'
       + '<button data-fb="ok">没事</button>';
@@ -123,7 +123,7 @@
         /* 这里不许承诺"以后会记得不牢"——fb 只存下来给用户自己看，
            没有任何代码会因为它改变输出。能改行为的只有月级投票（saidN）。
            说了做不到，比不说更糟。 */
-        toast('记下了 · 这个数我不改（改了就成假账）。年轮里那句判断，你可以在下面投「不准」');
+        toast('记下了 · 这个数我不改（改了就成假账）。年度页里那句判断，你可以在下面投「不准」');
       } else if (box.parentNode) {
         box.parentNode.removeChild(box);
       }
@@ -184,10 +184,10 @@
       noteSaid(k, text);
     }
     if (!r.total) {
-      if (fl.nw) return '今年写了 ' + fl.nw + ' 件，一件都还没勾。账本是空的，但清单不是。';
+      if (fl.nw) return '今年写了 ' + fl.nw + ' 件，一件都还没划掉。账本是空的，但清单不是。';
       return '今年账本还是空的。没记录不等于没干活，只是那些事没走这个窗。';
     }
-    var s = '今年完成 ' + r.total + ' 件';
+    var s = '今年划掉 ' + r.total + ' 件';
     if (r.active >= 3) s += '，落在 ' + r.active + ' 天里，动手那天平均 ' + (r.total / r.active).toFixed(1) + ' 件';
     else if (r.active === 1) s += '，全在一天里';
     else if (r.active > 1) s += '，散在 ' + r.active + ' 天里';
@@ -232,8 +232,8 @@
 
     // 日历对照：只在两边样本都够的时候说一句
     if (mv && mv.b > 0 && !hid('meet')) {
-      if (mv.a === 0) say('meet', '有会的那 ' + mv.aN + ' 天，一件都没完成。');
-      else if (mv.a < mv.b * 0.75) say('meet', '有会的日子，日均完成掉到没会时的 ' + Math.round(mv.a / mv.b * 100) + '%。');
+      if (mv.a === 0) say('meet', '有会的那 ' + mv.aN + ' 天，一件都没划掉。');
+      else if (mv.a < mv.b * 0.75) say('meet', '有会的日子，日均划掉掉到没会时的 ' + Math.round(mv.a / mv.b * 100) + '%。');
       else if (mv.a > mv.b * 1.25) say('meet', '有会的日子反而做得多，会没白开。');
       else say('meet', '有没有会，日均差不多。');
     }
@@ -279,10 +279,10 @@
   function tipRange(r) {
     if (!r.total) {
       return r.observed
-        ? '这 ' + r.days + ' 天里我开着 ' + r.observed + ' 天，一件都没勾。'
+        ? '这 ' + r.days + ' 天里我开着 ' + r.observed + ' 天，一件都没划掉。'
         : '这 ' + r.days + ' 天没有任何记录，我不知道那几天做没做。';
     }
-    var s = r.days + ' 天里完成 ' + r.total + ' 件';
+    var s = r.days + ' 天里划掉 ' + r.total + ' 件';
     if (r.active) s += '，动手的 ' + r.active + ' 天平均 ' + (r.total / r.active).toFixed(1) + ' 件';
     s += '。';
     if (r.best.n > 1) s += '最猛 ' + shortDate(r.best.day) + '，一天 ' + r.best.n + ' 件。';
@@ -291,7 +291,7 @@
        days - observed   = 我根本没看见（这不能算 0） */
     var seen0 = r.observed - r.active;
     var unknown = r.days - r.observed;
-    if (seen0 > 0) s += '另外 ' + seen0 + ' 天有记录但没勾。';
+    if (seen0 > 0) s += '另外 ' + seen0 + ' 天有记录但没划掉。';
     if (unknown > 0) s += '还有 ' + unknown + ' 天没有任何记录，那几天不算 0 件。';
     return s;
   }
@@ -354,18 +354,18 @@
     var st = statsToday();
     var stk = streakDays();
     var d = new Date();
-    /* 报告卡看哪一年：默认跟着今天；从年轮公告点进来时是公告报的那一年
+    /* 报告卡看哪一年：默认跟着今天；从年度公告点进来时是公告报的那一年
        （1/1–1/15 公告报去年，点进去必须也是去年，不能是今年的空账本）。 */
     var yr = reportYearSel || d.getFullYear();
 
     var head = '<div class="r-head"><span class="r-title">账本</span>'
       + '<span class="r-sub">' + (reportTab === 'yr'
-        ? (yr + ' 年轮 · 截至 ' + shortDate(d.getTime()))
+        ? (yr + ' 年度 · 截至 ' + shortDate(d.getTime()))
         : (shortDate(d.getTime()) + ' ' + weekday(d))) + '</span>'
       + '<button class="r-x" data-act="close">收起</button></div>'
       + '<div class="r-tabs">'
       + tabBtn('day', '今日') + tabBtn('wk', '本周') + tabBtn('d30', '30 天')
-      + tabBtn('h1', '半年') + tabBtn('yr', '年轮')
+      + tabBtn('h1', '半年') + tabBtn('yr', '年度')
       + '</div>';
 
     var body = '';
@@ -375,16 +375,16 @@
       var pct = Math.round(ratio * 100);
       var off = (138.2 * (1 - ratio)).toFixed(1);
       /* 环里原来只有一个「46%」，没有说明，被当成专注度。
-         它其实只回答一件事：今天清单上勾掉了多少。补一个 6 个字的标签，
-         并且 0 件事的时候不写 0%——0/0 不是"完成 0%"，是"今天没排事"。 */
+         它其实只回答一件事：今天清单上划掉了多少。补一个 6 个字的标签，
+         并且 0 件事的时候不写 0%——0/0 不是"划掉 0%"，是"今天没排事"。 */
       var pctIn = st.total ? (pct + '<small>%</small>') : '—';
-      var pctNote = st.total ? '今日完成' : '还没排事';
-      body = '<div class="r-top"><div class="r-donut-wrap" title="今日清单：完成 '
+      var pctNote = st.total ? '今日划掉' : '还没排事';
+      body = '<div class="r-top"><div class="r-donut-wrap" title="今日清单：划掉 '
         + st.done + ' 件 / 共 ' + st.total + ' 件">'
         + '<svg class="r-donut" viewBox="0 0 50 50"><circle class="bg" cx="25" cy="25" r="22"></circle>'
         + '<circle class="fg" cx="25" cy="25" r="22" style="stroke-dashoffset:' + off + '"></circle></svg>'
         + '<div class="r-pct"><b>' + pctIn + '</b><i>' + pctNote + '</i></div></div>'
-        + '<div class="r-nums">' + numCell(st.done, '已完成') + numCell(st.pending, '待办') + numCell(stk, '连续天数')
+        + '<div class="r-nums">' + numCell(st.done, '已划掉') + numCell(st.pending, '待办') + numCell(stk, '连续天数')
         + '</div></div>'
         + '<div class="r-week">' + sevenBars() + '</div>'
         + srcBlock(todaySrcLines())
@@ -397,26 +397,26 @@
       var rw = rangeStats(wn);
       var wnote;
       if (rw.total) {
-        wnote = '周一到今天 ' + rw.days + ' 天，完成 ' + rw.total + ' 件';
+        wnote = '周一到今天 ' + rw.days + ' 天，划掉 ' + rw.total + ' 件';
         if (rw.active) wnote += '，动手的 ' + rw.active + ' 天平均 ' + (rw.total / rw.active).toFixed(1) + ' 件';
         wnote += '。';
         if (rw.best.n > 1) wnote += '最猛 ' + shortDate(rw.best.day) + '，一天 ' + rw.best.n + ' 件。';
       } else if (rw.observed) {
         // observed < days 时，没记录的那几天不能算进"我开着"
         wnote = rw.observed === rw.days
-          ? '这 ' + rw.days + ' 天我开着，一件都没勾。'
-          : '这 ' + rw.days + ' 天里我开着 ' + rw.observed + ' 天，一件都没勾。';
+          ? '这 ' + rw.days + ' 天我开着，一件都没划掉。'
+          : '这 ' + rw.days + ' 天里我开着 ' + rw.observed + ' 天，一件都没划掉。';
       } else {
         wnote = '这 ' + rw.days + ' 天没有任何记录，我不知道那几天做没做。';
       }
       body = '<div class="r-nums r-nums-wide">'
-        + numCell(rw.total, '本周完成') + numCell(rw.active, '动手的天') + numCell(rw.best.n, '最猛一天')
+        + numCell(rw.total, '本周划掉') + numCell(rw.active, '动手的天') + numCell(rw.best.n, '最猛一天')
         + '</div>' + weekBars(wn)
         + '<div class="r-tip">' + wnote + '</div>' + quoteHtml();
     } else if (reportTab === 'd30') {
       var r30 = rangeStats(30);
       body = '<div class="r-nums r-nums-wide">'
-        + numCell(r30.total, '30 天完成') + numCell(r30.active, '动手的天') + numCell(r30.best.n, '最猛一天')
+        + numCell(r30.total, '30 天划掉') + numCell(r30.active, '动手的天') + numCell(r30.best.n, '最猛一天')
         + '</div>' + thirtyBars(30)
         + '<div class="r-tip">' + tipRange(r30) + '</div>' + quoteHtml();
     } else if (reportTab === 'h1') {
@@ -425,7 +425,7 @@
          没记录的日子会被当成断点，真实值只会更长。全看见了才敢写确定值。 */
       var rhLong = longestStreak(182);
       body = '<div class="r-nums r-nums-wide">'
-        + numCell(rh.total, '半年完成') + numCell(rh.active, '有干活的天')
+        + numCell(rh.total, '半年划掉') + numCell(rh.active, '有干活的天')
         + numCell((rh.observed < rh.days ? '≥ ' : '') + rhLong, '最长连续')
         + '</div>' + heatSvg(prevDayN(todayStart(), 181), todayStart())
         + '<div class="r-tip">' + tipRange(rh) + '</div>' + quoteHtml();
@@ -435,7 +435,7 @@
       var ymo = yearMonths(yr);
       var mv = meetingVsDone(yr);
       body = '<div class="r-nums r-nums-wide">'
-        + numCell(ry.total, '完成') + numCell(ry.active, '动手的天')
+        + numCell(ry.total, '划掉') + numCell(ry.active, '动手的天')
         + numCell((ry.observed < ry.days ? '≥ ' : '') + ry.longest, '最长连续')
         + '</div>'
         + monthBars(yr)
@@ -458,7 +458,7 @@
     reportOpen = (typeof force === 'boolean') ? force : !reportOpen;
     el.report.classList.toggle('show', reportOpen);
     if (reportOpen) {
-      /* 年份选择只在「年轮公告点进来」的那一次有效；用户自己再点开报告
+      /* 年份选择只在「年度公告点进来」的那一次有效；用户自己再点开报告
          就回到今天所在的年份，别一直停在去年。 */
       if (!annivJump) reportYearSel = 0;
       annivJump = false;

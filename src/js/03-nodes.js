@@ -162,7 +162,7 @@
     var addBtn = document.createElement('button');
     addBtn.className = 'p-act';
     addBtn.innerHTML = '＋';
-    addBtn.title = '往这个项目里加任务';
+    addBtn.title = '往这个项目里派一件活';
     addBtn.addEventListener('click', function (e) {
       e.stopPropagation();
       targetProject = (targetProject === p.id) ? null : p.id;
@@ -242,7 +242,7 @@
     inp.type = 'text';
     inp.maxLength = 90;
     inp.setAttribute('autocomplete', 'off');
-    inp.placeholder = '在「' + p.text + '」里加节点，回车确认';
+    inp.placeholder = '在「' + p.text + '」里加一件，回车确认';
     inp.addEventListener('keydown', function (e) {
       if (e.isComposing || e.keyCode === 229) return;   // 中文输入法选词中，不算提交
       if (e.key === 'Enter') {
@@ -272,7 +272,7 @@
     if (!state.nodes.length) {
       var li = document.createElement('li');
       li.className = 'empty';
-      li.textContent = '还没有任务。回车加一条，或点 ＋ 新建项目';
+      li.textContent = '还没有活。回车记一件，或点 ＋ 新建项目';
       el.list.appendChild(li);
     } else {
       projects.forEach(function (p) { el.list.appendChild(projectNode(p)); });
@@ -334,8 +334,8 @@
     });
     if (!toastActive) {
       if (!state.nodes.length) el.summary.textContent = '';
-      else if (pending === 0) el.summary.textContent = '全部完成 · 共 ' + done + ' 项';
-      else el.summary.textContent = '还剩 ' + pending + ' 件事' + (done ? ' · ' + done + ' 项已完成' : '');
+      else if (pending === 0) el.summary.textContent = '全部划掉 · 共 ' + done + ' 件';
+      else el.summary.textContent = '还剩 ' + pending + ' 件事' + (done ? ' · ' + done + ' 件已划掉' : '');
     }
     el.footer.classList.toggle('hidden', state.nodes.length === 0);
 
@@ -343,8 +343,8 @@
     el.clear.classList.toggle('idle', done === 0);
     el.clear.innerHTML = '一键清除' + (done ? '<span class="cnt">' + done + '</span>' : '');
     el.clear.title = done
-      ? ('清除已勾选完成的 ' + done + ' 项')
-      : '还没有勾选完成的任务';
+      ? ('清走已划掉的 ' + done + ' 件')
+      : '还没有划掉一件';
   }
 
   /* 轻提示：优先就地替换底部状态文字（不遮挡、不改变窗口高度） */
@@ -376,12 +376,12 @@
   function updatePlaceholder() {
     var p = targetProject ? byId(targetProject) : null;
     if (p) {
-      el.input.placeholder = '回车加到「' + p.text + '」';
+      el.input.placeholder = '回车记到「' + p.text + '」';
       el.input.classList.add('targeting');
       el.tgText.textContent = '正在写入 · ' + (p.kind === 'file' ? '文件 ' : '') + p.text;
       el.targetbar.classList.add('show');
     } else {
-      el.input.placeholder = '写一件要办的事，回车添加';
+      el.input.placeholder = '写一件要办的事，回车记上';
       el.input.classList.remove('targeting');
       el.targetbar.classList.remove('show');
       targetProject = null;
@@ -480,7 +480,7 @@
     };
     state.nodes.push(t);
     // 这也是一条「新建」，和 addTask / addTaskTo / addNodeWithPath 一样要记进流水：
-    // 少记一笔，年轮「新写 N 件」就比真实少，flowLine 的"多做/少做"跟着偏。
+    // 少记一笔，年度「新写 N 件」就比真实少，flowLine 的"多做/少做"跟着偏。
     bumpFlow('n', 1);
     if (targetProject) { var pp = byId(targetProject); if (pp) pp.collapsed = false; }
     persist();
@@ -515,7 +515,7 @@
      口径只加不减：老的 x 不重算、不反推，q 从这一版开始单独记。 */
   function removeNode(id, why) {
     var gone = byId(id);
-    // 只有"删掉一件没做完的"才算放弃；删已完成的只是清理，不该记成放弃
+    // 只有"删掉一件没做完的"才算放弃；删已划掉的只是清理，不该记成放弃
     if (gone && gone.type === 'task' && !gone.done) {
       bumpFlow(why === 'writeoff' ? 'q' : 'x', 1);
     }
@@ -543,8 +543,8 @@
       markUndone(t);
     } else {
       markDone(t);
-      /* 单次提醒勾掉就清（已经做到了，别再响）；
-         时间段提醒是"每天这个点，到结束日"的常设承诺，勾掉时保留它，
+      /* 单次提醒划掉就清（已经做到了，别再响）；
+         时间段提醒是"每天这个点，到结束日"的常设承诺，划掉时保留它，
          取消勾选时由 markUndone 重新算下一次，否则 chip 写着「每天 09:30」
          而 remindAt 是空，checkDue 永远跳过 = 提醒静默死亡。 */
       if (!t.range) t.remindAt = null;

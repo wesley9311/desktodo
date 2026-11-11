@@ -4,7 +4,7 @@
    用法：node tools/check.js        （先跑 tools/bundle.sh）
 
    所有用例都跑在一个**固定假时钟**上：日期相关的逻辑（月级投票只在 1–7 号出现、
-   日结报昨天、本周从周一算、年轮公告 1/1–1/15 报去年）如果跟着真实日期走，
+   日结报昨天、本周从周一算、年度公告 1/1–1/15 报去年）如果跟着真实日期走，
    一个月里只有几天能全绿，其余日子会红——红灯一多，就没人看了。
    默认 NOW = 2026-11-06（周五）12:00：6 号在 1–7 号窗口内，本周一 = 11-02，
    昨天 11-05 没有记录（日结条不该出现）。需要别的时点的用例单独传 now。 */
@@ -160,7 +160,7 @@ const caseTruth = makePage('__t_truth.html', {
   if (b1) b1.click();
   ok('回答后不再问', !ask('gap'));
   tab('yr');
-  ok('年轮标了漏记', txt().indexOf('可能漏记') >= 0);
+  ok('年度标了漏记', txt().indexOf('可能漏记') >= 0);
   // 月级投票只在每月 1–7 号出现；固定时钟是 11-06，上月键 = 2026-10
   var v = ask('vote');
   ok('月级投票出现', !!v);
@@ -229,9 +229,9 @@ const caseTabs = makePage('__t_tabs.html', {
     ok('页签 ' + k + ' 有内容', t.length > 30, t.slice(0, 40));
   });
   tab('yr');
-  ok('年轮标题对', txt().indexOf('年轮') >= 0);
+  ok('年度标题对', txt().indexOf('年度') >= 0);
   // 认赔要单独看得见：它是"我认下这件事不做了"，不是"我不想要了"
-  ok('年轮里能看见认赔件数', txt().indexOf('认赔') >= 0, txt().slice(0, 300));
+  ok('年度页里能看见认赔件数', txt().indexOf('认赔') >= 0, txt().slice(0, 300));
   // 年页不许再统计"节日 N 天"：那是日历条目数，不是这一年干了什么
   ok('年页不统计节日天数', txt().indexOf('节日 ') < 0, txt().slice(0, 300));
   tab('day');
@@ -239,7 +239,7 @@ const caseTabs = makePage('__t_tabs.html', {
   // 「（休）」要读成人话；「（班）」和节气不能跟着被当成放假
   ok('（休）标记读成放假', txt().indexOf('测试节日 放假') >= 0, txt().slice(0, 200));
   // 环里必须写清算什么：只有一个百分比会被读成"专注度"
-  ok('今日环写明在算什么', txt().indexOf('今日完成') >= 0 || txt().indexOf('还没排事') >= 0,
+  ok('今日环写明在算什么', txt().indexOf('今日划掉') >= 0 || txt().indexOf('还没排事') >= 0,
     txt().slice(0, 120));
   // 行存在就必须带口径；行不存在（样本不足）也算合规——但两种都不能靠"或"蒙过去
   var meetRow = document.querySelector('.r-src[data-k="meet"]');
@@ -279,7 +279,7 @@ const caseDebt = makePage('__t_debt.html', {
   ok('面板列出 3 件', rows.length === 3, 'rows=' + rows.length);
   ok('拖得最久的排第一', rows.length > 0 && rows[0].textContent.indexOf('8天') >= 0,
      rows.length ? rows[0].textContent : '');
-  ok('写了销账是什么意思', document.body.textContent.indexOf('不算完成，也不再欠着') >= 0);
+  ok('写了销账是什么意思', document.body.textContent.indexOf('不算划掉，也不再欠着') >= 0);
 
   if (rows.length) {
     var wv = rows[0].querySelector('.d-wv');
@@ -322,7 +322,7 @@ const caseWeek = makePage('__t_week.html', {
   tab('wk');
   var t = txt();
   ok('本周页签有内容', t.length > 30, t.slice(0, 40));
-  ok('标了本周完成', t.indexOf('本周完成') >= 0, t.slice(0, 120));
+  ok('标了本周划掉', t.indexOf('本周划掉') >= 0, t.slice(0, 120));
   ok('不拿 7 天当分母', t.indexOf('周一到今天') >= 0, t.slice(0, 200));
   var bars = document.querySelectorAll('.r-bar');
   var wd = (new Date().getDay() + 6) % 7;
@@ -332,10 +332,10 @@ const caseWeek = makePage('__t_week.html', {
   `
 });
 
-/* ---------------- 用例 W2：开着但一件没勾 ----------------
+/* ---------------- 用例 W2：开着但一件没划掉 ----------------
    这一屏原来有两句话在打架：柱子区说"这周还没有记录"，
-   下面那行总结说"这 7 天我开着，一件都没勾"。同一次渲染里两种说法。
-   判据是 sum（完成件数），可 sum=0 不等于没有记录——那是把"有记录"说成"没记录"，
+   下面那行总结说"这 7 天我开着，一件都没划掉"。同一次渲染里两种说法。
+   判据是 sum（划掉件数），可 sum=0 不等于没有记录——那是把"有记录"说成"没记录"，
    和产品最核心的那条口径正好相反。
    反方向也一样：只看见 1 天就说"这 7 天都开着"，是把"没记录"说成"有记录"。 */
 const caseWeekZero = makePage('__t_week0.html', {
@@ -349,7 +349,7 @@ const caseWeekZero = makePage('__t_week0.html', {
   tab('wk');
   var t = txt();
   ok('空账但开着：不说"没有记录"', t.indexOf('这周还没有记录') < 0, t.slice(0, 160));
-  ok('空账但开着：说成"开着，没勾"', t.indexOf('没勾') >= 0, t.slice(0, 160));
+  ok('空账但开着：说成"开着，没划掉"', t.indexOf('没划掉') >= 0, t.slice(0, 160));
   tab('day');
   var d = txt();
   ok('只看见 1 天：不吹"这 7 天都开着"', d.indexOf('这 7 天都开着') < 0, d.slice(0, 200));
@@ -381,7 +381,7 @@ const caseStreak = makePage('__t_streak.html', {
   body: `
   tab('yr');
   var t = txt();
-  ok('年轮的最长连续标了"≥"', t.indexOf('≥') >= 0, t.slice(0, 200));
+  ok('年度的最长连续标了"≥"', t.indexOf('≥') >= 0, t.slice(0, 200));
   ok('没有把下界写成确定值', /最长连续/.test(t), t.slice(0, 200));
   tab('h1');
   ok('半年页也标了"≥"', txt().indexOf('≥') >= 0, txt().slice(0, 200));`
@@ -488,7 +488,7 @@ const caseSeen = makePage('__t_seen.html', {
   ok('今天补了 seen 戳', !!(last.seen && last.seen["${TODAY_K}"] === 1), "${TODAY_K} → " + JSON.stringify(last.seen || {}));
   ok('戳只记日期不记内容', Object.keys(last.seen || {}).every(function (k) { return /^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(k); }));
   tab('day');
-  ok('今日页仍正常', txt().indexOf('已完成') >= 0);
+  ok('今日页仍正常', txt().indexOf('已划掉') >= 0);
 
   // seen 不再裁剪：900 个历史键 + 今天 = 901，一个都不许少
   // （裁掉旧 seen 会让"看得见的天/最长连续"在几年后自己变小，和"历史不回改"冲突）
@@ -616,12 +616,12 @@ const caseExport = makePage('__t_export.html', {
 });
 
 /* ---------------- 用例 L：账本自洽 ----------------
-   1 取消勾选一件超过 60 天前完成的任务，daily 要能退回来
+   1 取消勾选一件超过 60 天前划掉的任务，daily 要能退回来
    2 顺延天数累加上界与重算上界必须一致（366），数字不能自己变小
    3 认赔（q）也算"这天我看得见"
    4 报告五个页签高度差几百 px，切页签窗口不能弹
    这几条以前 99 条断言全绿也照样存在，因为断言没查它们。 */
-// 60 天前正午完成：一定已经被 pruneLog 裁掉（它只留 60 天，且按 todayStart 算）
+// 60 天前正午划掉：一定已经被 pruneLog 裁掉（它只留 60 天，且按 todayStart 算）
 const SIXTY_TS = (() => { const d = new Date(T0); d.setDate(d.getDate() - 60); d.setHours(12, 0, 0, 0); return d.getTime(); })();
 const SIXTY_K = dayKeyOf(SIXTY_TS);
 // 只有一次销账的那天：daily 没有、seen 没有、只有 flow.q
@@ -653,12 +653,12 @@ const caseLedger = makePage('__t_ledger.html', {
 
   // 1) 明细已裁时取消勾选，账要退回来
   var row = document.querySelector('.task[data-id="1"] .check');
-  ok('找得到那条已完成任务的勾选框', !!row);
+  ok('找得到那条已划掉任务的勾选框', !!row);
   if (row) row.click();
   var st1 = window.__debugState();
   ok('取消勾选后那天减回 0（明细已裁也要退）', !st1.daily['${SIXTY_K}'],
     'daily=' + JSON.stringify(st1.daily));
-  ok('任务本身回到未完成', st1.nodes.filter(function (n) { return n.id === 1; })[0].done === false);
+  ok('任务本身回到未划掉', st1.nodes.filter(function (n) { return n.id === 1; })[0].done === false);
 
   // 2) 顺延天数：涨不上去，也不会自己变小
   var long = st1.nodes.filter(function (n) { return n.id === 2; })[0];
@@ -758,7 +758,7 @@ const caseRange = makePage('__t_range.html', {
   `
 });
 
-/* ---------------- 用例 Y：年轮公告跨年那 15 天 ----------------
+/* ---------------- 用例 Y：年度公告跨年那 15 天 ----------------
    1/1–1/15 公告报的是去年；点「看」必须翻到去年，不能打开今年的空账本。 */
 const caseAnnivYear = makePage('__t_anniv.html', {
   now: new Date(2027, 0, 3, 12, 0, 0),
@@ -777,9 +777,9 @@ const caseAnnivYear = makePage('__t_anniv.html', {
      document.getElementById('annivTitle').textContent);
   document.getElementById('annivGo').click();
   var sub = (document.querySelector('.r-sub') || {}).textContent || '';
-  ok('点「看」打开的是 2026 年轮', sub.indexOf('2026 年轮') >= 0, sub);
-  ok('不是今年的空账本', sub.indexOf('2027 年轮') < 0, sub);
-  ok('年轮里是 2026 的账', txt().indexOf('完成') >= 0 && txt().indexOf('6') >= 0, txt().slice(0, 200));
+  ok('点「看」打开的是 2026 年度', sub.indexOf('2026 年度') >= 0, sub);
+  ok('不是今年的空账本', sub.indexOf('2027 年度') < 0, sub);
+  ok('年度页里是 2026 的账', txt().indexOf('划掉') >= 0 && txt().indexOf('6') >= 0, txt().slice(0, 200));
   ok('公告标记成看过了', window.__debugState().anniv.seen2026 === 1,
      JSON.stringify(window.__debugState().anniv));
   `
@@ -802,7 +802,7 @@ const caseProjUndo = makePage('__t_projundo.html', {
   var st = window.__debugState();
   var y = String(new Date().getFullYear());
   document.querySelector('.task[data-id="2"] .check').click();
-  ok('完成时记进所在项目', !!(st.byProj[y] && st.byProj[y]['1'] === 1), JSON.stringify(st.byProj));
+  ok('划掉时记进所在项目', !!(st.byProj[y] && st.byProj[y]['1'] === 1), JSON.stringify(st.byProj));
   ok('明细里记了当时的项目 id', (st.log[st.log.length - 1] || {}).p === 1, JSON.stringify(st.log));
   document.querySelector('.project[data-id="1"] .p-act.rm').click();
   ok('删项目后任务落到顶层', st.nodes.filter(function (n) { return n.id === 2; })[0].parentId === null);
@@ -927,7 +927,7 @@ for (const [name, file] of [['三层纠错', caseTruth], ['授权状态', casePe
   ['连续是下界', caseStreak], ['手动顺延记账', casePush],
   ['观测口径', caseSeen], ['积压与占比', caseBacklog],
   ['口径一致', caseCaliber], ['导出与状态', caseExport], ['账本自洽', caseLedger],
-  ['不可见不落账', caseVisible], ['时间段提醒', caseRange], ['年轮跨年', caseAnnivYear],
+  ['不可见不落账', caseVisible], ['时间段提醒', caseRange], ['年度跨年', caseAnnivYear],
   ['项目退账', caseProjUndo], ['文件任务流水', caseFileFlow], ['版本闸门', caseVersionGate],
   ['磁盘冲突', caseConflict], ['今日只写不排', caseFutureTip]]) {
   const out = run(file);

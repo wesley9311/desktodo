@@ -1,4 +1,4 @@
-  /* ---------------- 年轮公告 ----------------
+  /* ---------------- 年度公告 ----------------
      每年 12/20 到次年 1/15 出现一次，看过就不再打扰。
      12/20 之后看的是当年，1/15 之前看的是上一年。
      这里没有"又一年过去了"之类的煽情，只有这一年的数字。 */
@@ -26,7 +26,7 @@
     if (!force && state.anniv && state.anniv['seen' + y]) return false;
     var r = yearStats(y);
     if (r.total < 3) return false;        // 数字太少算不上年报，宁可不打扰
-    el.annivTitle.textContent = y + ' 年轮';
+    el.annivTitle.textContent = y + ' 年度';
     // active 是"有产出的天"，observed 是"我看得见的天"——两个数不能混着叫"有记录"
     el.annivSub.textContent = r.total + ' 件 · ' + r.active + ' 天有产出'
       + (r.observed > r.active ? ' · 看得见 ' + r.observed + ' 天' : '')

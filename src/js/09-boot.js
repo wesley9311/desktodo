@@ -30,7 +30,7 @@
   el.clear.addEventListener('click', function () {
     var doneList = state.nodes.filter(function (n) { return n.type === 'task' && n.done; });
     if (!doneList.length) {
-      toast('还没有勾选完成的任务');
+      toast('还还没有划掉一件');
       render();
       return;
     }
@@ -38,7 +38,7 @@
     state.nodes = state.nodes.filter(function (x) { return !(x.type === 'task' && x.done); });
     persist();
     render();
-    toast('清除已完成 · ' + n + ' 项');
+    toast('清走已划掉的 · ' + n + ' 件');
   });
 
   document.getElementById('btnMore').addEventListener('click', function (e) {
@@ -249,7 +249,7 @@
     tickClock();
     checkDue();
     refreshChips();
-    // 跨年那一刻应用可能一直开着：每秒看一眼要不要出年轮公告
+    // 跨年那一刻应用可能一直开着：每秒看一眼要不要出年度公告
     if (!el.anniv.classList.contains('show')) maybeAnniversary();
   };
 

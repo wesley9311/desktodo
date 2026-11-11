@@ -177,7 +177,7 @@
   .databar .db-go { color: var(--accent); }
   .databar .db-go:hover, .databar .db-x:hover { opacity: .7; }
 
-  /* 年轮公告：每年 12/20 - 次年 1/15 自动出现一次 */
+  /* 年度公告：每年 12/20 - 次年 1/15 自动出现一次 */
   .anniv {
     display: none; align-items: center; gap: 8px;
     margin: 0 0 9px; padding: 8px 9px 8px 10px; border-radius: 10px;
@@ -756,7 +756,7 @@
     border-radius: 12px; background: var(--card);
   }
   .report.show { display: block; animation: pop .16s ease; }
-  /* 页签高度差很大：今日约 200px，年轮约 700px。
+  /* 页签高度差很大：今日约 200px，年度约 700px。
      高度直接跟内容走的话，切一次页签整个窗口就弹一下，读数字时眼睛在抖。
      这里给一个上限 + 自己滚，实际高度由 07-truth.js 按"只增不减"锁住：
      打开时按当前页签定高，之后切页签只可能变高，不会先缩再涨。 */

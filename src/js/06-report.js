@@ -83,18 +83,18 @@
       sum += c;
       if (c > max) max = c;
     }
-    /* "一件没勾"和"我没开过"是两件事。这条以前只判 sum，于是整周开着但没勾东西时，
-       图表说"还没有记录"、下面那行总结说"我开着，一件都没勾"——同一屏里两句话打架。 */
+    /* "一件没划掉"和"我没开过"是两件事。这条以前只判 sum，于是整周开着但没勾东西时，
+       图表说"还没有记录"、下面那行总结说"我开着，一件都没划掉"——同一屏里两句话打架。 */
     if (!sum) {
       var obs7 = counts.filter(function (x) { return x.obs; }).length;
       /* 只有 7 天全被观测到，才配说「这 7 天都开着」。
          只看见 1 天就这么说，等于把「没记录」说成「有记录」——
          和产品最核心那条口径（没记录 ≠ 0 件）正好相反。 */
       return '<div class="r-empty">' + (obs7 === 7
-        ? '这 7 天都开着，一件没勾'
+        ? '这 7 天都开着，一件没划掉'
         : obs7
-          ? '这 7 天里我开着 ' + obs7 + ' 天，一件没勾'
-          : '近 7 天还没有记录，勾掉第一件就会长出来') + '</div>';
+          ? '这 7 天里我开着 ' + obs7 + ' 天，一件没划掉'
+          : '近 7 天还没有记录，划掉第一件就会长出来') + '</div>';
     }
     var bars = '';
     counts.forEach(function (it) {
@@ -103,7 +103,7 @@
       var isToday = dayStart(it.day) === t0;
       var lab = isToday ? '今' : ['日', '一', '二', '三', '四', '五', '六'][dd.getDay()];
       bars += '<div class="r-bar' + (isToday ? ' today' : '') + '" title="'
-        + (it.obs ? shortDate(it.day) + ' 完成 ' + it.c + ' 件' : shortDate(it.day) + ' 没记录') + '">'
+        + (it.obs ? shortDate(it.day) + ' 划掉 ' + it.c + ' 件' : shortDate(it.day) + ' 没记录') + '">'
         + '<i class="' + (isToday ? 'on ' : '') + (it.obs ? '' : 'unk') + '" style="height:' + hgt + 'px"></i>'
         + '<u>' + lab + '</u></div>';
     });
@@ -132,10 +132,10 @@
       var obsW = counts.filter(function (x) { return x.obs; }).length;
       // 同 sevenBars：说"这周开着"必须有每一天的观测证据，否则只报开了几天
       return '<div class="r-empty">' + (obsW === counts.length
-        ? '这周开着，一件没勾'
+        ? '这周开着，一件没划掉'
         : obsW
-          ? '这 ' + counts.length + ' 天里我开着 ' + obsW + ' 天，一件没勾'
-          : '这周还没有记录，勾掉第一件就会长出来') + '</div>';
+          ? '这 ' + counts.length + ' 天里我开着 ' + obsW + ' 天，一件没划掉'
+          : '这周还没有记录，划掉第一件就会长出来') + '</div>';
     }
     var lab = ['一', '二', '三', '四', '五', '六', '日'];
     var bars = '';
@@ -143,7 +143,7 @@
       var hgt = 3 + Math.round(it.c / max * 18);
       var isToday = dayStart(it.day) === t0;
       bars += '<div class="r-bar' + (isToday ? ' today' : '') + '" title="'
-        + (it.obs ? shortDate(it.day) + ' 完成 ' + it.c + ' 件' : shortDate(it.day) + ' 没记录') + '">'
+        + (it.obs ? shortDate(it.day) + ' 划掉 ' + it.c + ' 件' : shortDate(it.day) + ' 没记录') + '">'
         + '<i class="' + (isToday ? 'on ' : '') + (it.obs ? '' : 'unk') + '" style="height:' + hgt + 'px"></i>'
         + '<u>' + (isToday ? '今' : lab[i]) + '</u></div>';
     });
@@ -277,7 +277,7 @@
     var curM = (now.getFullYear() === year) ? now.getMonth() : 11;
     var max = 1, sum = 0;
     months.forEach(function (c, i) { if (i <= curM) { sum += c; if (c > max) max = c; } });
-    if (!sum) return '<div class="r-empty">今年还没有完成记录，勾掉一件这根柱子就长出来</div>';
+    if (!sum) return '<div class="r-empty">今年还没有划掉记录，划掉一件这根柱子就长出来</div>';
     var bars = '';
     for (var m = 0; m < 12; m++) {
       var c = months[m];
@@ -309,7 +309,7 @@
     // 认赔是另一件事：删掉是"不想要了"，认赔是"我认下这件事不做了"。
     // 两者混成一个数，那笔了结就没有重量了。
     if (fl.anyQ) {
-      html += '<span title="今年主动认下不做了的件数（销账）。不算完成，也不再欠着">认赔 <b>' + fl.wr + '</b></span>';
+      html += '<span title="今年主动认下不做了的件数（销账）。不算划掉，也不再欠着">认赔 <b>' + fl.wr + '</b></span>';
     }
     if (net > 0) {
       html += '<span title="做完的比新写的多 ' + net + ' 件，在清旧账">多做 <b>' + net + '</b></span>';
@@ -351,7 +351,7 @@
     if (state.hide && state.hide[k]) return '';
     return '<div class="r-src" data-k="' + k + '"'
       + (title ? ' title="' + escapeHtml(title) + '"' : '') + '>' + inner
-      + '<button class="r-q" data-q="' + k + '" title="这条不对？">?</button></div>';
+      + '<button class="r-q" data-q="' + k + '" title="这行不对？">?</button></div>';
   }
   function hid(k) { return !!(state.hide && state.hide[k]); }
 
@@ -456,7 +456,7 @@
   function remYearHtml() {
     if (!srcOk('rem') || !ext.rem.total) return '';
     var r = ext.rem;
-    var s = '提醒事项 <b>' + r.done + '</b> 件今年勾掉';
+    var s = '提醒事项 <b>' + r.done + '</b> 件今年划掉';
     if (r.open) s += ' · 还剩 <b>' + r.open + '</b>';
     if (r.overdue) s += ' · 其中 <b>' + r.overdue + '</b> 件过期';
     return srcRow('rem.y', s);

@@ -101,7 +101,7 @@ extension AppDelegate {
         let fit = NSMenuItem(title: "高度贴合内容", action: #selector(fitHeightToContent), keyEquivalent: "")
         fit.target = self
         menu.addItem(fit)
-        let pv = NSMenuItem(title: "预览年轮公告…", action: #selector(previewAnniversary), keyEquivalent: "")
+        let pv = NSMenuItem(title: "预览年度公告…", action: #selector(previewAnniversary), keyEquivalent: "")
         pv.target = self
         menu.addItem(pv)
         let login = NSMenuItem(title: "开机自动显示", action: #selector(toggleLoginItem), keyEquivalent: "")
@@ -158,7 +158,7 @@ extension AppDelegate {
         let a = NSAlert()
         a.messageText = "清空全部数据？"
         a.informativeText = """
-        清单、历史、年轮统计会一起删除：主文件、上一版备份、读不出来时留下的坏文件，都不留。
+        清单、历史、年度统计会一起删除：主文件、上一版备份、读不出来时留下的坏文件，都不留。
         不进废纸篓，没法撤销。
         """
         a.alertStyle = .warning
@@ -178,7 +178,7 @@ extension AppDelegate {
                 guard let self = self else { return }
                 guard ok else {
                     self.suppressCount = max(0, self.suppressCount - 1)
-                    self.nativeToast("导出没完成，没有清空")
+                    self.nativeToast("导出没划掉，没有清空")
                     return
                 }
                 self.finishWipe()
