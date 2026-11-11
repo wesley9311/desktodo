@@ -64,27 +64,26 @@ lsof -nP -a -p "$PID" -i          # 没有任何输出 = 一个连接都没有
 
 ```
 ~/Library/Application Support/DeskTodo/
-├── data.json                      主文件，明文 JSON，字段名是人话
-├── data.json.bak                  上一版
-├── data.json.bak.1 / .bak.2       再往前两代（一共留三代）
-├── snapshots/data-YYYY-MM-DD.json 每天第一笔写入时的快照，留 30 天
-├── data.corrupt-*.json            读不出来时的原文件留证（不会自动删）
-├── data.conflict-*.json           发现别的实例改过文件时留的副本
-└── focus.json                     前台应用计时（仅在屏幕时间不可用时才写，7 天自动裁）
+├── ledger.json                    主文件，明文 JSON，字段名是人话
+├── snapshots/                     轮转快照，保留最近 5 份
+├── backups/                       备份 + index.json（只记 hash / 时间 / 条数）
+├── logs/desktodo.log              诊断日志（600，512 KB 轮转）
+├── focus.json                     前台应用计时（仅在屏幕时间不可用时才写，7 天自动裁）
+└── .desk.lock                     写锁
 ```
 
-诊断日志在 `~/Library/Logs/DeskTodo/desktodo.log`：权限 600、超过 512 KB 轮转，
+诊断日志在 `~/Library/Application Support/DeskTodo/logs/desktodo.log`：权限 600、超过 512 KB 轮转，
 只含计数与状态（时段、屏幕秒数、会议数、锁屏时长），不含任务内容、日历标题、文件名、app 名。
 
 三条硬规则，写在 `src/Storage.swift` 里，别处不许绕：
 
 1. **解析得动才准落盘**——前端传了半截 JSON 就拒写，好数据不被覆盖成坏文件；
-2. **覆盖前留一版** `data.json.bak`；
+2. **覆盖前留一版**：`backups/ledger.bak.<日期>T<时间>.json`，轮转 5 份；
 3. **读不出来先把原文件改名留证**，再退备份，绝不直接当空数据返回
    （空数据 + 下一次自动保存 = 真数据没了，这是最隐蔽的一种丢法）。
 
-导出：菜单 →「导出全部数据…」，得到一个 zip（`data.json` + `focus.json` + 一份人能读的 `读我.md`）。
-清空：菜单 →「清空全部数据…」，真删主文件、三代备份、每日快照、留证文件、冲突副本、`focus.json`，
+导出：菜单 →「导出账本…」，得到一个 `ledger-<版本>-<日期>.json`（账本原样 + `meta` 段）。
+清空：菜单 →「清空全部数据…」，真删账本、快照、备份、日志、`focus.json`、留证与冲突副本，
 连同偏好里的位置/城市，不进废纸篓；清空后的几秒内应用会拒绝写盘，防止页面把旧账写回来。
 
 **诊断信息**（菜单 →「复制诊断信息」）只含计数与状态枚举：版本、清单条数、
@@ -103,7 +102,7 @@ lsof -nP -a -p "$PID" -i          # 没有任何输出 = 一个连接都没有
 1. **只从本仓库 Releases 下载**。非官方构建请当作陌生软件对待；
 2. **核一下 hash**（Release 页会贴 `shasum -a 256` 的值）：
    ```bash
-   shasum -a 256 ~/Downloads/DeskTodo-*.zip
+   shasum -a 256 ~/Downloads/DeskTodo-*.dmg
    ```
    对不上就是被动过。
 

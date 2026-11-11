@@ -13,7 +13,7 @@ body:
     attributes:
       label: 版本
       description: 菜单 →「关于」里那串；或者 `grep CFBundleShortVersionString 浮窗待办.app/Contents/Info.plist`
-      placeholder: "0.5.0"
+      placeholder: "0.1.0"
     validations:
       required: true
 
@@ -57,7 +57,7 @@ body:
     attributes:
       label: 关于你的数据
       description: |
-        数据只在你自己硬盘上（`~/Library/Application Support/DeskTodo/data.json`），
+        数据只在你自己硬盘上（`~/Library/Application Support/DeskTodo/ledger.json`），
         我看不到。要贴的话请**先自己删掉任务正文**，只留结构。
       options:
         - label: 我知道贴数据前要删掉任务正文

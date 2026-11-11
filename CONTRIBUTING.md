@@ -55,6 +55,8 @@
 ./tools/bundle.sh      # 前端分片 → 单文件（WKWebView 用 file://，不能用 ES module）
 ./tools/audit.sh       # 边界审计八类：网络出口 / 反遥测 / 权限面 / 数据不入库 / 可移植性 / 口径唯一 / 调试入口 / 诊断日志
 node tools/check.js    # 195 条行为断言，任何一条 FAIL 就非 0 退出
+./tools/docs-check.sh  # 文档里的数字与实测一致
+./tools/release.sh     # 发版预检（不 push、不打 tag）
 ```
 
 只改页面（HTML/CSS/JS）时用 `./tools/hot.sh`，它热替换三个文件并重启，**不重新签名**，
@@ -94,7 +96,7 @@ URLSession"准备的，不是形式主义。
 2. 一个分支只做一件事。改了三个不相干的地方，说明该拆三次。
 3. 合回 `main` 用 squash，一个分支在历史上只留一个提交，信息按下一节写。
 
-**发布靠 tag，不靠分支**：`v0.5.0` 指向 `main` 上那一个提交，规则见
+**发布靠 tag，不靠分支**：`v0.1.0` 指向 `main` 上那一个提交，规则见
 [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) §8.1。
 
 > 本仓库早期的提交是直接推 `main` 的。规矩从这份文档写下之后开始算，
