@@ -26,7 +26,13 @@ P="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' src/Info.pli
 [ "$VERSION" = "$P" ] && ok "VERSION = Info.plist ($VERSION)" || bad "VERSION=${VERSION}，Info.plist=$P"
 grep -q "^## $VERSION " CHANGELOG.md && ok "CHANGELOG 有 $VERSION 条目" || bad "CHANGELOG 缺少 $VERSION"
 if git rev-parse -q --verify "refs/tags/v$VERSION" >/dev/null 2>&1; then
-  [ "$(git rev-list -n1 "v$VERSION")" = "$(git rev-parse HEAD)" ] && ok "tag v$VERSION 指向 HEAD" || bad "tag v$VERSION 不指向 HEAD"
+  if [ "$(git rev-list -n1 "v$VERSION")" = "$(git rev-parse HEAD)" ]; then
+    ok "tag v$VERSION 指向 HEAD"
+  elif git merge-base --is-ancestor "v$VERSION" HEAD 2>/dev/null; then
+    ok "tag v$VERSION 指向 HEAD 的祖先（发布后新增 $(git rev-list --count "v$VERSION"..HEAD) 个提交）"
+  else
+    bad "tag v$VERSION 不在 HEAD 历史里"
+  fi
   [ "$(git cat-file -t "v$VERSION")" = "tag" ] && ok "tag 是 annotated" || bad "tag 不是 annotated"
 else
   bad "缺少 tag v$VERSION"

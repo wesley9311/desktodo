@@ -6,7 +6,9 @@
 
 ## 下载
 
-**[⬇ 下载 macOS 版（Universal）](https://github.com/wesley9311/desktodo/releases/latest)** — 一个包同时支持 Apple Silicon 与 Intel，不需要 Xcode。
+**[⬇ 下载 macOS 版（Universal）](https://github.com/wesley9311/desktodo/releases)** — 一个包同时支持 Apple Silicon 与 Intel，不需要 Xcode。
+
+> 0.x 的包标为 Pre-release（体验包），不是正式版；正式版从 1.0.0 开始。
 
 安装三步：
 
