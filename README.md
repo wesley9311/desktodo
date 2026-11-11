@@ -55,7 +55,7 @@
 ## 代码结构
 
 ```
-src/*.swift              原生壳（4303 行 / 18 个文件）：窗口、圆点、菜单、桥、数据源
+src/*.swift              原生壳（4351 行 / 18 个文件）：窗口、圆点、菜单、桥、数据源
 src/js/01..10-*.js       页面（3911 行 / 10 个分片），构建时拼成单个 IIFE
 src/styles.css           样式（926 行）
 tools/bundle.sh          分片 → 单文件（WKWebView 用 file://，不能用 ES module）
@@ -65,7 +65,23 @@ tools/package.sh         universal 构建 + dmg + sha256
 tools/release.sh         发版前预检（不 push、不打 tag）
 tools/integrity.sh       产物完整性矩阵（9 项）
 tools/docs-check.sh      文档数字与实测一致
+tools/verify.sh          一键验证（审计 / 断言 / 自检 / 夹具 / 对抗）
+tools/adversarial.sh     18 项对抗审查里可自动化的部分
 ```
+
+## 自己验证这份构建
+
+```bash
+# 1. 校验文件与签名（下载的 dmg）
+shasum -a 256 DeskTodo-<版本>-universal.dmg     # 与 Release 页的 SHA256SUMS.txt 对照
+codesign --verify --strict --verbose=2 /Applications/DeskTodo.app
+lipo -info /Applications/DeskTodo.app/Contents/MacOS/DeskTodo   # x86_64 arm64
+
+# 2. 从源码验证（需要 Xcode 命令行工具）
+./tools/verify.sh
+```
+
+`spctl` 对未公证的包会返回 rejected，这是预期；首次打开需要在系统设置里手动允许一次。
 
 ## 文档
 

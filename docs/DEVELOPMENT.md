@@ -3,7 +3,7 @@
 ## 1. 结构
 
 ```
-src/*.swift        原生壳 18 个文件 / 4303 行
+src/*.swift        原生壳 18 个文件 / 4351 行
   main.swift                 入口、单实例守卫、自检模式
   AppDelegate.swift          状态与生命周期（存储状态、窗口、计时器）
   AppDelegate+Window.swift   窗口、缩放、拖拽
@@ -89,6 +89,9 @@ main.swift
 | 构建闸门 | `./build.sh` | 自检不过不安装 |
 | 发布预检 | `./tools/release.sh` | 四同步、干净工作区、不 push/不打 tag |
 | 产物完整性 | `./tools/integrity.sh` | 9 项矩阵 |
+| 一键验证 | `./tools/verify.sh [--artifact <dmg>]` | 上面能自动化的全部 + 夹具金标 + 对抗审查 |
+| 对抗审查 | `./tools/adversarial.sh` | 只跑可自动化项；其余标 MANUAL/CI 与方法 |
+| 夹具金标 | `tools/fixtures/expected/*.json` | 10 组场景的规范化输出，`verify.sh` 逐个 diff |
 
 **已知盲区**：断言全部在页面 DOM/逻辑层；原生窗口、浮窗、小圆点、菜单栏、桥协议没有运行时断言。不得用「断言通过」推断界面正常。
 

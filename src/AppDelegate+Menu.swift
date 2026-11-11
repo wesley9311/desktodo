@@ -124,6 +124,12 @@ extension AppDelegate {
         let res = NSMenuItem(title: "恢复备份…", action: #selector(doRestore), keyEquivalent: "")
         res.target = self
         menu.addItem(res)
+        let roll = NSMenuItem(title: "回滚到上一版…", action: #selector(doRollback), keyEquivalent: "")
+        roll.target = self
+        menu.addItem(roll)
+        let unin = NSMenuItem(title: "卸载…", action: #selector(doUninstall), keyEquivalent: "")
+        unin.target = self
+        menu.addItem(unin)
         let folder = NSMenuItem(title: "打开数据文件夹", action: #selector(openDataFolder), keyEquivalent: "")
         folder.target = self
         menu.addItem(folder)
@@ -187,6 +193,47 @@ extension AppDelegate {
             self.pushStoreStatus()
             self.nativeToast("已恢复 · \(r.after) 件（恢复前 \(r.before) 件）")
         }
+    }
+
+    @objc func doRollback() {
+        let a = NSAlert()
+        a.messageText = "回滚到上一版"
+        a.informativeText = """
+        1. 先「导出账本…」留底。
+        2. 从 Releases 下载上一版 dmg。
+        3. 拖进「应用程序」覆盖，打开。
+
+        账本 schemaVersion 高于旧版时，旧版会只读打开，不会改写数据；
+        要带走数据，用「导出账本…」。
+        """
+        a.addButton(withTitle: "好")
+        a.runModal()
+    }
+
+    @objc func doUninstall() {
+        let a = NSAlert()
+        a.messageText = "卸载 DeskTodo？"
+        a.informativeText = "默认只移走应用，数据保留在 ~/Library/Application Support/DeskTodo/。"
+        a.addButton(withTitle: "只移走应用")
+        a.addButton(withTitle: "移走并清空数据…")
+        a.addButton(withTitle: "取消")
+        let r = a.runModal()
+        if r == .alertThirdButtonReturn { return }
+        if r == .alertSecondButtonReturn {
+            let b = NSAlert()
+            b.messageText = "清空全部数据并卸载"
+            b.informativeText = "不可撤销。请输入「清空」两个字再继续。"
+            b.addButton(withTitle: "确认清空并卸载")
+            b.addButton(withTitle: "取消")
+            let tf = NSTextField(frame: NSRect(x: 0, y: 0, width: 220, height: 24))
+            tf.placeholderString = "清空"
+            b.accessoryView = tf
+            guard b.runModal() == .alertFirstButtonReturn, tf.stringValue == "清空" else { return }
+            _ = wipeAllData()
+        }
+        let appURL = Bundle.main.bundleURL
+        try? FileManager.default.trashItem(at: appURL, resultingItemURL: nil)
+        NSApp.terminate(nil)
     }
 
     @objc func doExport() {

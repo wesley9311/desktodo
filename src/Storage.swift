@@ -154,8 +154,9 @@ extension AppDelegate {
                 obj = parsed
             }
         } else {
-            NSLog("DeskTodo export: no readable ledger")
-            return nil
+            // 新用户/空账本：导出一个合法的空账本，而不是失败
+            obj = ["v": storeSchemaVersion, "nodes": [], "daily": [:]]
+            NSLog("DeskTodo export: empty ledger")
         }
         obj["meta"] = [
             "exportedAt": ISO8601DateFormatter().string(from: Date()),

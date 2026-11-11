@@ -1,0 +1,1 @@
+{"fixture":"cross-month","steps":[{"out":"ok","s":"save"},{"daily":2,"kept":0,"kind":"normal","nodes":0,"parsed":true,"s":"load","tasks":-1,"v":2}]}

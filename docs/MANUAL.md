@@ -109,7 +109,15 @@ open /Applications/DeskTodo.app
 - 屏幕使用时间需要「完全磁盘访问」；不给也能用，只是少一行。
 - 备份只保留最近 5 份；更长的历史请定期导出。
 
-## 10. 常见问题
+## 10. 自己验证
+
+- **文件与签名**：`shasum -a 256 DeskTodo-<版本>-universal.dmg` 与 Release 页的 `SHA256SUMS.txt` 对照；`codesign --verify --strict` 应通过；`spctl` 对未公证包返回 rejected，属预期。
+- **不联网**：菜单勾「不联网（天气停更）」→ `lsof -nP -a -p $(pgrep -f DeskTodo) -i` 应无输出。
+- **数据**：`ledger.json` 是明文；菜单「导出账本…」得到可被文本编辑器打开的文件，含 `meta` 段。
+- **备份**：菜单「备份自检…」应显示 7/7；`backups/index.json` 只记 hash、字节数、条数、时间。
+- **诊断**：菜单「复制诊断信息」得到的内容不含任务正文；可自行搜索 `待办`、`title`、`task`，应为 0 处。
+
+## 11. 常见问题
 
 | 现象 | 处理 |
 |---|---|

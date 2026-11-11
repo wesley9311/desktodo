@@ -1,0 +1,1 @@
+{"fixture":"snapshot","steps":[{"out":"ok","s":"save"},{"out":"ok","s":"save"},{"count":1,"s":"snapshots"},{"out":"ok","s":"save"},{"count":1,"s":"snapshots"}]}
