@@ -55,7 +55,8 @@ fi
 
 echo
 echo "[3] 措辞扫描（不得出现当前版本以外的 0.x.y 版本号）"
-EXTRA="$(git grep -hoE '0\.[0-9]+\.[0-9]+' -- '*.md' '*.sh' '*.yml' '*.swift' '*.js' '*.txt' 2>/dev/null \
+# VERSIONING.md 里的升位示例是规则说明，不是历史版本号，排除扫描。
+EXTRA="$(git grep -hoE '0\.[0-9]+\.[0-9]+' -- '*.md' '*.sh' '*.yml' '*.swift' '*.js' '*.txt' ':!VERSIONING.md' 2>/dev/null \
   | grep -vx "$VERSION" | sort -u || true)"
 if [ -z "$EXTRA" ]; then
   ok "没有其他 0.x.y 版本号"
