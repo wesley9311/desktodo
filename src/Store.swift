@@ -34,7 +34,11 @@ final class Store {
     private let queue = DispatchQueue(label: "local.desktodo.store")
     private var knownMtime: Date?
     private var knownSize: Int = -1
+    private var knownHash: String?
     private var readOnly = false
+    /// 旧账本迁移失败时置位：fail-closed，禁止写新账本，每次启动重试。
+    private(set) var migrationPending = false
+    private(set) var migrationReason: String?
     private var usedBackupNames = Set<String>()
     private let version = (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "dev"
 
@@ -77,13 +81,18 @@ final class Store {
     private func migrate() {
         let fm = FileManager.default
 
-        // 1) 旧账本 → ledger.json（复制，保留原件）
+        // 1) 旧账本 → ledger.json（先读入内存并校验，成功才落盘；失败 fail-closed）
         let legacyLedger = dir.appendingPathComponent(LegacyPaths.ledgerFileName)
         if !fm.fileExists(atPath: ledgerURL.path), fm.fileExists(atPath: legacyLedger.path) {
-            if (try? fm.copyItem(at: legacyLedger, to: ledgerURL)) != nil {
+            if let data = try? Data(contentsOf: legacyLedger),
+               let s = String(data: data, encoding: .utf8), isValid(s),
+               atomicWrite(data, to: ledgerURL) {
                 NSLog("DeskTodo store: migrated from legacy#1")
             } else {
-                NSLog("DeskTodo store: migration failed (legacy#1)")
+                // 旧数据读不到/写不进：不创建空账本，禁止后续写入，下次启动重试。
+                migrationPending = true
+                migrationReason = "旧数据还没导入（读不到旧文件或写不进新账本）"
+                NSLog("DeskTodo store: migration pending (legacy#1)")
             }
         }
 
@@ -137,6 +146,16 @@ final class Store {
         var out = StoreLoad()
         queue.sync {
             let fm = FileManager.default
+            // 迁移未完成：不读、不写、不迁移，界面明确告知（fail-closed）。
+            if migrationPending, !fm.fileExists(atPath: ledgerURL.path) {
+                out.kind = .migrationPending
+                out.readOnlyReason = migrationReason
+                knownMtime = nil
+                knownSize = -1
+                knownHash = nil
+                NSLog("DeskTodo store: migration pending, write refused")
+                return
+            }
             if let s = safeRead(ledgerURL) {
                 if let v = schemaVersion(s), v > storeSchemaVersion {
                     out.kind = .normal
@@ -164,6 +183,8 @@ final class Store {
                 if atomicWrite(Data(s.utf8), to: ledgerURL) {
                     NSLog("DeskTodo store: recovered from backup")
                 }
+                // P2-4：恢复出的数据版本才是当前真实版本，只读状态按它重算
+                readOnly = (schemaVersion(s) ?? storeSchemaVersion) > storeSchemaVersion
                 refreshKnown()
                 return
             }
@@ -171,6 +192,7 @@ final class Store {
             out.kind = (fm.fileExists(atPath: ledgerURL.path) || !out.kept.isEmpty) ? .corrupt : .fresh
             knownMtime = nil
             knownSize = -1
+            knownHash = nil
         }
         return out
     }
@@ -207,6 +229,11 @@ final class Store {
                 result = .rejected
                 return
             }
+            if migrationPending {
+                NSLog("DeskTodo store: rejected (migration pending)")
+                result = .rejected
+                return
+            }
             if let v = schemaVersion(json), v > storeSchemaVersion {
                 NSLog("DeskTodo store: rejected (schema#1)")
                 result = .rejected
@@ -214,15 +241,11 @@ final class Store {
             }
             let fm = FileManager.default
             let exists = fm.fileExists(atPath: ledgerURL.path)
-            if exists, let a = try? fm.attributesOfItem(atPath: ledgerURL.path),
-               let m = a[.modificationDate] as? Date,
-               let sz = (a[.size] as? NSNumber)?.intValue {
+            // P2-3：用内容 hash 判外部改动（0.5s 内、字节数相同也逃不掉）
+            if exists, let diskData = try? Data(contentsOf: ledgerURL) {
+                let diskHash = sha256Hex(diskData)
                 let drifted: Bool
-                if let known = knownMtime {
-                    drifted = abs(m.timeIntervalSince(known)) > 0.5 || sz != knownSize
-                } else {
-                    drifted = true
-                }
+                if let known = knownHash { drifted = (diskHash != known) } else { drifted = true }
                 if drifted {
                     let copy = backupsURL.appendingPathComponent("ledger.conflict-\(stampFmt.string(from: Date())).json")
                     try? fm.copyItem(at: ledgerURL, to: copy)
@@ -234,15 +257,25 @@ final class Store {
             }
 
             backupBeforeWriteIfNeeded(exists: exists)
-            if exists {
-                rotateBackups()
-                writeDailySnapshotIfNeeded()
+            // P2-1：先把"写之前的内容"备份成新文件（不删旧备份），主文件写成功后才轮转。
+            // 主文件写失败时，备份历史保持原样，不会出现"新备份已写、最旧一份被删、保存却失败"。
+            var pendingBackup: URL?
+            if exists, let cur = try? Data(contentsOf: ledgerURL) {
+                let dst = nextBackupURL()
+                if atomicWrite(cur, to: dst) { pendingBackup = dst }
             }
             if atomicWrite(data, to: ledgerURL) {
+                if exists {
+                    trimBackups(keep: 5)
+                    writeDailySnapshotIfNeeded()
+                }
                 refreshKnown()
                 refreshIndexLocked()
                 result = .ok
             } else {
+                // 主文件没写成：把刚写的临时备份撤掉，备份历史保持原样（P2-1）
+                if let pb = pendingBackup { try? FileManager.default.removeItem(at: pb) }
+                NSLog("DeskTodo store: write failed, backups untouched")
                 result = .rejected
             }
         }
@@ -264,16 +297,12 @@ final class Store {
         }
     }
 
-    private func rotateBackups() {
-        let fm = FileManager.default
+    /// 把备份收敛到 keep 份，只删最旧。调用方保证主文件已写成功（P2-1）。
+    private func trimBackups(keep: Int) {
         let names = backupFileList()
-        if names.count >= 5 {
-            for n in names.prefix(names.count - 4) {
-                try? fm.removeItem(at: backupsURL.appendingPathComponent(n))
-            }
-        }
-        if let data = try? Data(contentsOf: ledgerURL) {
-            _ = atomicWrite(data, to: nextBackupURL())
+        guard names.count > keep else { return }
+        for n in names.prefix(names.count - keep) {
+            try? FileManager.default.removeItem(at: backupsURL.appendingPathComponent(n))
         }
     }
 
@@ -310,19 +339,22 @@ final class Store {
         return safeRead(url)
     }
 
+    /// 最新一份坏文件留证（可能不是合法 JSON，只读原始字节；P2-5）。
+    func newestQuarantineJSON() -> String? {
+        let fm = FileManager.default
+        guard let all = try? fm.contentsOfDirectory(atPath: backupsURL.path) else { return nil }
+        let names = all.filter { $0.hasPrefix("ledger.corrupt-") && $0.hasSuffix(".json") }.sorted()
+        guard let last = names.last else { return nil }
+        return try? String(contentsOf: backupsURL.appendingPathComponent(last), encoding: .utf8)
+    }
+
     /// 导出成功后触发一次备份（三个触发点之一）。
     func backupNow(_ reason: String) {
         queue.sync {
             guard let data = try? Data(contentsOf: ledgerURL) else { return }
             let dst = nextBackupURL()
             _ = atomicWrite(data, to: dst)
-            let fm = FileManager.default
-            let names = backupFileList()
-            if names.count > 5 {
-                for n in names.prefix(names.count - 5) {
-                    try? fm.removeItem(at: backupsURL.appendingPathComponent(n))
-                }
-            }
+            trimBackups(keep: 5)
             refreshIndexLocked()
             NSLog("DeskTodo store: backup (\(reason))")
         }
@@ -412,18 +444,40 @@ final class Store {
 
     func backupFileList() -> [String] { backupURLs().map { $0.lastPathComponent } }
 
-    /// 恢复：先备份当前账本，再写回选中备份。
+    /// 恢复：先校验只读状态与 schema，再**成功备份并校验**当前账本，最后写回。
+    /// 只有备份确认写成功，才允许覆盖主文件（P1-1 / P1-2 / P2-4）。
     func restore(from url: URL) -> (before: Int, after: Int, ok: Bool) {
         var result = (before: 0, after: 0, ok: false)
         queue.sync {
+            // 只读账本（更高 schema）不允许被旧备份覆盖
+            guard !readOnly else {
+                NSLog("DeskTodo store: restore rejected (read-only)")
+                return
+            }
             guard let d = try? Data(contentsOf: url),
                   let s = String(data: d, encoding: .utf8), isValid(s) else { return }
+            // 目标备份的 schema 不得高于当前支持，避免越权写回"未来"数据
+            if let v = schemaVersion(s), v > storeSchemaVersion {
+                NSLog("DeskTodo store: restore rejected (backup schema too new)")
+                return
+            }
             let before = (try? String(contentsOf: ledgerURL, encoding: .utf8)).map { entryCount(of: $0) } ?? 0
+            // 恢复前备份必须成功且可读回一致；失败就中止，绝不静默覆盖
             if let cur = try? Data(contentsOf: ledgerURL) {
                 let dst = nextBackupURL()
-                _ = atomicWrite(cur, to: dst)
+                guard atomicWrite(cur, to: dst),
+                      (try? Data(contentsOf: dst)) == cur else {
+                    NSLog("DeskTodo store: restore aborted (pre-backup failed)")
+                    return
+                }
+            } else if FileManager.default.fileExists(atPath: ledgerURL.path) {
+                // 主文件存在但读不出来：无法安全备份，拒绝恢复
+                NSLog("DeskTodo store: restore aborted (ledger unreadable)")
+                return
             }
             guard atomicWrite(d, to: ledgerURL) else { return }
+            // 恢复后按恢复出的 schema 重算只读状态（P2-4）
+            readOnly = (schemaVersion(s) ?? storeSchemaVersion) > storeSchemaVersion
             refreshKnown()
             refreshIndexLocked()
             result = (before, entryCount(of: s), true)
@@ -432,23 +486,28 @@ final class Store {
     }
 
     /// 七项自动审阅：只报计数与状态，不报内容。
-    func review() -> BackupReview {
+    /// readOnly=true（默认）：只读；不创建/删除文件、不写索引 —— 供「备份自检」和诊断使用。
+    /// readOnly=false：允许自动补齐备份（仅测试/维护显式调用）。
+    func review(readOnly: Bool = true) -> BackupReview {
         var r = BackupReview()
         let fm = FileManager.default
-        refreshIndex()
+        if !readOnly { refreshIndex() }
 
         // 1 目录可写
         let probe = dir.appendingPathComponent(".write-probe")
-        let writable = (try? Data("x".utf8).write(to: probe)) != nil
-        try? fm.removeItem(at: probe)
+        let writable: Bool
+        if readOnly {
+            writable = fm.isWritableFile(atPath: dir.path)
+        } else {
+            writable = (try? Data("x".utf8).write(to: probe)) != nil
+            try? fm.removeItem(at: probe)
+        }
         r.lines.append("1/7 目录可写 " + (writable ? "✓" : "✗"))
 
-        // 2 备份数 ≤ 5（超出删最旧后重算）
+        // 2 备份数 ≤ 5（只读模式不删；超限照实报 ✗）
         var files = backupFileList()
-        if files.count > 5 {
-            for n in files.prefix(files.count - 5) {
-                try? fm.removeItem(at: backupsURL.appendingPathComponent(n))
-            }
+        if files.count > 5 && !readOnly {
+            trimBackups(keep: 5)
             files = backupFileList()
             refreshIndex()
         }
@@ -460,12 +519,12 @@ final class Store {
         let newestOK = newestJSON.map { isValid($0) } ?? false
         r.lines.append("3/7 最新备份可解析 " + (newestOK ? "✓" : (files.isEmpty ? "—（还没有备份）" : "✗")))
 
-        // 4 最新备份条数 = 当前账本（不一致则立即补一份）
+        // 4 最新备份条数 vs 当前账本（只读模式不自动补备份，避免"自检改变现场"）
         let current = (try? String(contentsOf: ledgerURL, encoding: .utf8)) ?? ""
         let curN = entryCount(of: current)
         var newestN = newestJSON.map { entryCount(of: $0) } ?? -1
         var matched = (curN == newestN)
-        if !matched, curN > 0 {
+        if !matched && !readOnly && curN > 0 {
             backupNow("auto")
             files = backupFileList()
             if let last = files.last, let s = try? String(contentsOf: backupsURL.appendingPathComponent(last), encoding: .utf8) {
@@ -473,7 +532,14 @@ final class Store {
             }
             matched = (curN == newestN)
         }
-        r.lines.append("4/7 最新备份条数 = 当前账本（\(curN)） " + (matched ? "✓" : "✗"))
+        if matched {
+            r.lines.append("4/7 最新备份条数 = 当前账本（\(curN)） ✓")
+        } else if readOnly {
+            // 上次写入之后还没备份，是正常中间态：下次保存/备份会补齐
+            r.lines.append("4/7 备份 \(newestN) 条 / 当前 \(curN) 条 —（下次保存自动补齐）")
+        } else {
+            r.lines.append("4/7 最新备份条数 = 当前账本（\(curN)） ✗")
+        }
 
         // 5 sha256 与索引一致（不一致标记 tampered，不删除）
         let idx = loadIndex()
@@ -488,9 +554,9 @@ final class Store {
         }
         r.lines.append("5/7 备份未被篡改 " + (tampered == 0 ? "✓" : "✗（\(tampered) 份标记 tampered）"))
 
-        // 6 账本非空但备份缺失 → 立即补一份
+        // 6 账本非空但备份缺失（只读模式只报，不补）
         var missing = (curN > 0 && backupFileList().isEmpty)
-        if missing {
+        if missing && !readOnly {
             backupNow("auto")
             missing = backupFileList().isEmpty
         }
@@ -561,9 +627,11 @@ final class Store {
            let m = a[.modificationDate] as? Date {
             knownMtime = m
             knownSize = (a[.size] as? NSNumber)?.intValue ?? -1
+            knownHash = (try? Data(contentsOf: ledgerURL)).map { sha256Hex($0) }
         } else {
             knownMtime = nil
             knownSize = -1
+            knownHash = nil
         }
     }
 
