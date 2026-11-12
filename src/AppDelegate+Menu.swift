@@ -115,6 +115,9 @@ extension AppDelegate {
         let exp = NSMenuItem(title: "导出账本…", action: #selector(doExport), keyEquivalent: "")
         exp.target = self
         menu.addItem(exp)
+        let expLegacy = NSMenuItem(title: "导出旧版兼容账本…", action: #selector(doExportLegacy), keyEquivalent: "")
+        expLegacy.target = self
+        menu.addItem(expLegacy)
         let bak = NSMenuItem(title: "立即备份", action: #selector(doBackupNow), keyEquivalent: "")
         bak.target = self
         menu.addItem(bak)
@@ -198,13 +201,15 @@ extension AppDelegate {
     @objc func doRollback() {
         let a = NSAlert()
         a.messageText = "回滚到上一版"
+        let legacyName = LegacyPaths.ledgerFileName
         a.informativeText = """
-        1. 先「导出账本…」留底。
-        2. 从 Releases 下载上一版 dmg。
-        3. 拖进「应用程序」覆盖，打开。
+        旧版只读 \(legacyName)，不认现在的 ledger.json。回滚前先把数据落成旧版文件：
 
-        账本 schemaVersion 高于旧版时，旧版会只读打开，不会改写数据；
-        要带走数据，用「导出账本…」。
+        1. 菜单 →「导出旧版兼容账本…」，存一份 \(legacyName)。
+        2. 菜单 →「打开数据文件夹」，把这份 \(legacyName) 复制进去。
+        3. 再从 Releases 下载上一版 dmg，拖进「应用程序」覆盖并打开。
+
+        账本 schemaVersion 高于旧版时，旧版会只读打开，不会改写数据。
         """
         a.addButton(withTitle: "好")
         a.runModal()
@@ -239,6 +244,36 @@ extension AppDelegate {
     @objc func doExport() {
         exportViaPage { [weak self] ok in
             self?.nativeToast(ok ? "已导出：原始数据 + 一份说明" : "没有导出（已取消或写入失败）")
+        }
+    }
+
+    /// P1-4：旧版兼容导出。回滚到上一版前，先把当前账本落成旧版能读的文件名（见 LegacyPaths）。
+    @objc func doExportLegacy() {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.dateFormat = "yyyyMMdd"
+        let panel = NSSavePanel()
+        panel.title = "导出旧版兼容账本"
+        panel.prompt = "导出"
+        let legacyName = LegacyPaths.ledgerFileName
+        panel.message = "写成上一版能读的 \(legacyName)（不含 meta）。回滚前用它替换数据目录里的 \(legacyName)。"
+        panel.nameFieldStringValue = "data-\(f.string(from: Date())).json"
+        panel.canCreateDirectories = true
+        if #available(macOS 11.0, *) { panel.allowedContentTypes = [.json] }
+        NSApp.activate(ignoringOtherApps: true)
+        suppressCount += 1
+        cancelPendingAutoHide()
+        panel.begin { [weak self] resp in
+            guard let self = self else { return }
+            let ok: Bool = {
+                guard resp == .OK, let dest = panel.url else { return false }
+                return self.buildLegacyExport(to: dest)
+            }()
+            self.nativeToast(ok ? "已导出旧版兼容账本" : "没有导出（已取消或写入失败）")
+            self.window?.orderFrontRegardless()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                self.suppressCount = max(0, self.suppressCount - 1)
+            }
         }
     }
 

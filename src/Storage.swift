@@ -41,6 +41,7 @@ struct StoreStatus {
         case normal
         case recovered
         case corrupt
+        case migrationPending
     }
     var kind: Kind = .normal
     var kept: [String] = []
@@ -128,7 +129,7 @@ extension AppDelegate {
                 guard resp == .OK, let dest = panel.url else { return false }
                 return self.buildExport(to: dest, readme: readme)
             }()
-            if ok { self.store.backupNow("export") }
+            // buildExport 内部已经备份一次；这里不再备（P2-7：一次导出只多一份备份）
             completion(ok)
             self.window?.orderFrontRegardless()
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
@@ -144,27 +145,65 @@ extension AppDelegate {
     /// 账本 + meta 段。自检与导出面板共用。
     func exportPayload() -> Data? {
         var obj: [String: Any] = [:]
+        var source = "ledger"
         let raw = store.load().json
         if let d = raw.data(using: .utf8),
            let parsed = try? JSONSerialization.jsonObject(with: d) as? [String: Any] {
             obj = parsed
         } else if let fallback = store.newestBackupJSON() {
+            source = "backup"
             if let d = fallback.data(using: .utf8),
                let parsed = try? JSONSerialization.jsonObject(with: d) as? [String: Any] {
                 obj = parsed
             }
+        } else if let quarantined = store.newestQuarantineJSON() {
+            // P2-5：坏账本且没有可用备份时，把留证的原始字节一起带走，避免"导出得到空账本"
+            source = "quarantine"
+            obj = ["v": storeSchemaVersion, "nodes": [], "daily": [:], "quarantineRaw": quarantined]
+            NSLog("DeskTodo export: quarantine raw included")
         } else {
             // 新用户/空账本：导出一个合法的空账本，而不是失败
+            source = "fresh"
             obj = ["v": storeSchemaVersion, "nodes": [], "daily": [:]]
             NSLog("DeskTodo export: empty ledger")
         }
+        // P2-6：meta.schemaVersion 用账本真实 v（含高版本只读账本），不再写死编译期常量
+        let ledgerSchema = (obj["v"] as? NSNumber)?.intValue ?? storeSchemaVersion
         obj["meta"] = [
             "exportedAt": ISO8601DateFormatter().string(from: Date()),
             "appVersion": appVersion,
             "buildNumber": (Bundle.main.infoDictionary?["CFBundleVersion"] as? String) ?? "0",
-            "schemaVersion": storeSchemaVersion
+            "schemaVersion": ledgerSchema,
+            "source": source
         ]
         return try? JSONSerialization.data(withJSONObject: obj, options: [.sortedKeys, .prettyPrinted])
+    }
+
+    /// P1-4：旧版兼容导出。把当前账本写成旧版认识的文件名（见 LegacyPaths；不含 meta，v 不超过当前支持版本），
+    /// 供"回滚到上一版"时先落一份旧版可读的数据。
+    func legacyExportPayload() -> Data? {
+        let raw = store.load().json
+        guard let d = raw.data(using: .utf8),
+              var obj = try? JSONSerialization.jsonObject(with: d) as? [String: Any] else { return nil }
+        obj.removeValue(forKey: "meta")
+        let v = (obj["v"] as? NSNumber)?.intValue ?? storeSchemaVersion
+        obj["v"] = min(v, storeSchemaVersion)
+        return try? JSONSerialization.data(withJSONObject: obj, options: [.sortedKeys, .prettyPrinted])
+    }
+
+    func buildLegacyExport(to dest: URL) -> Bool {
+        guard let data = legacyExportPayload() else {
+            NSLog("DeskTodo legacy export: no payload")
+            return false
+        }
+        do {
+            try data.write(to: dest, options: .atomic)
+            NSLog("DeskTodo legacy export ok")
+            return true
+        } catch {
+            NSLog("DeskTodo legacy export failed")
+            return false
+        }
     }
 
     /// 写盘 + 导出成功后触发一次备份。
@@ -368,6 +407,122 @@ extension AppDelegate {
         } else {
             check("篡改被第 5 项拦下", false)
         }
+
+        // ── P1-1：只读账本拒绝恢复 ──
+        let futureV3 = "{\"v\":3,\"nodes\":[{\"id\":1,\"type\":\"task\",\"text\":\"future\"}]}"
+        try? Data(futureV3.utf8).write(to: storeURL)
+        _ = store.load()
+        store.backupNow("ro-test")
+        let roTarget = store.backupFileList().last.map { store.backupsURL.appendingPathComponent($0) }
+        var roRestoreOk = true
+        if let u = roTarget { roRestoreOk = store.restore(from: u).ok }
+        check("只读账本拒绝恢复", roRestoreOk == false)
+        check("拒绝后只读账本未被覆盖", (try? String(contentsOf: storeURL, encoding: .utf8)) == futureV3)
+
+        // ── P2-4：从低版本备份恢复后只读状态应清除 ──
+        try? Data(good2.utf8).write(to: storeURL)
+        _ = store.load()
+        store.backupNow("v2-ro")
+        try? Data(futureV3.utf8).write(to: storeURL)
+        _ = store.load()                                   // readOnly = true
+        try? Data("坏账本".utf8).write(to: storeURL)
+        let recoveredRO = store.load()                     // 从 v2 备份恢复
+        check("从低版本备份恢复后只读状态清除", recoveredRO.readOnlyReason == nil && store.save(good2) == .ok)
+
+        // ── P1-2：恢复前备份失败 → 中止，不覆盖 ──
+        try? Data(good2.utf8).write(to: storeURL)
+        _ = store.load()
+        store.backupNow("pre")
+        let preTarget = store.backupFileList().last.map { store.backupsURL.appendingPathComponent($0) }
+        var abortedRestore = false
+        if let u = preTarget {
+            _ = chmod(store.backupsURL.path, 0o500)
+            let r = store.restore(from: u)
+            _ = chmod(store.backupsURL.path, 0o700)
+            abortedRestore = (r.ok == false)
+        }
+        check("恢复前备份失败时中止恢复", abortedRestore)
+        check("中止后主账本未被覆盖", (try? String(contentsOf: storeURL, encoding: .utf8)) == good2)
+
+        // ── P2-1：保存失败不删旧备份 ──
+        let nBeforeFail = store.backupFileList().count
+        _ = chmod(supportDir.path, 0o500)
+        let failedSave = writeStore(good2)
+        _ = chmod(supportDir.path, 0o700)
+        check("保存失败时备份历史不变", failedSave == .rejected && store.backupFileList().count == nBeforeFail)
+
+        // ── P2-3：同大小、同 mtime 的外部改动也必须报冲突 ──
+        try? Data(good2.utf8).write(to: storeURL)
+        _ = store.load()
+        let mt0 = (try? FileManager.default.attributesOfItem(atPath: storeURL.path))?[.modificationDate] as? Date
+        let sameLen = good2.replacingOccurrences(of: "\"a\"", with: "\"b\"")
+        try? Data(sameLen.utf8).write(to: storeURL)
+        if let mt0 { try? FileManager.default.setAttributes([.modificationDate: mt0], ofItemAtPath: storeURL.path) }
+        var sameSizeConflict = false
+        if case .conflict = writeStore(good2) { sameSizeConflict = true }
+        check("同大小同 mtime 的外部改动也报冲突", sameSizeConflict)
+        try? Data(good2.utf8).write(to: storeURL)
+        _ = store.load()
+
+        // ── P2-2：审阅只读，不新增/删除备份、不留探针 ──
+        let filesBeforeReview = store.backupFileList().count
+        let rv = store.review()
+        check("审阅 7 项", rv.lines.count == 7)
+        check("审阅不新增备份", store.backupFileList().count == filesBeforeReview)
+        check("审阅不留探针文件", !FileManager.default.fileExists(atPath: supportDir.appendingPathComponent(".write-probe").path))
+
+        // ── P2-7：一次导出只多一份备份 ──
+        for f in store.backupFileList() { try? FileManager.default.removeItem(at: store.backupsURL.appendingPathComponent(f)) }
+        store.backupNow("zero")
+        let nExp0 = store.backupFileList().count
+        let expDest = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("dt-exp-\(getpid()).json")
+        let expOK = buildExport(to: expDest, readme: "x")
+        let nExp1 = store.backupFileList().count
+        try? FileManager.default.removeItem(at: expDest)
+        check("导出成功", expOK)
+        check("一次导出只多一份备份", nExp1 - nExp0 == 1)
+
+        // ── P1-4：旧版兼容导出（回滚用）──
+        let legacyDest = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("dt-legacy-\(getpid()).json")
+        let legacyOK = buildLegacyExport(to: legacyDest)
+        let legacyData: Data? = try? Data(contentsOf: legacyDest)
+        let legacyObj = legacyData.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
+        let legacyNodes = (legacyObj?["nodes"] as? [Any])?.count ?? -1
+        try? FileManager.default.removeItem(at: legacyDest)
+        check("旧版兼容导出成功", legacyOK)
+        check("旧版兼容导出无 meta 且条数一致", legacyObj != nil && legacyObj?.index(forKey: "meta") == nil && legacyNodes == 1)
+
+        // ── P2-5：坏账本且无备份时，导出要带回留证的原始字节 ──
+        for f in store.backupFileList() { try? FileManager.default.removeItem(at: store.backupsURL.appendingPathComponent(f)) }
+        try? Data("这不是 JSON".utf8).write(to: storeURL)
+        _ = readStore()
+        let qParsed = exportPayload().flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
+        check("坏账本无备份时导出带原始字节", ((qParsed?["quarantineRaw"] as? String)?.isEmpty == false))
+
+        // ── P2-6：高版本账本导出的 meta.schemaVersion 用真实 v ──
+        try? Data(futureV3.utf8).write(to: storeURL)
+        _ = store.load()
+        let v3Parsed = exportPayload().flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
+        let v3Meta = v3Parsed?["meta"] as? [String: Any]
+        check("v3 账本导出 meta.schemaVersion = 3", (v3Meta?["schemaVersion"] as? NSNumber)?.intValue == 3)
+        try? Data(good2.utf8).write(to: storeURL)
+        _ = store.load()
+
+        // ── P1-3：迁移失败 fail-closed；旧文件修好后下次启动重试 ──
+        let migFail = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("dt-migfail-\(getpid())", isDirectory: true)
+        try? FileManager.default.removeItem(at: migFail)
+        try? FileManager.default.createDirectory(at: migFail, withIntermediateDirectories: true)
+        let unreadable = migFail.appendingPathComponent(LegacyPaths.ledgerFileName)
+        try? Data(good2.utf8).write(to: unreadable)
+        _ = chmod(unreadable.path, 0o000)
+        let pendingStore = Store(dataDirectory: migFail)
+        check("迁移失败时不创建新账本", !FileManager.default.fileExists(atPath: pendingStore.ledgerURL.path))
+        check("迁移失败时状态为待迁移", pendingStore.load().kind == .migrationPending)
+        check("迁移失败时拒绝写入", pendingStore.save(good2) == .rejected)
+        _ = chmod(unreadable.path, 0o600)
+        let retryStore = Store(dataDirectory: migFail)
+        check("旧文件可读后下次启动迁移成功", FileManager.default.fileExists(atPath: retryStore.ledgerURL.path))
+        try? FileManager.default.removeItem(at: migFail)
 
         // 清空
         try? Data("{\"2026-01-01\":{}}".utf8).write(to: store.focusURL)

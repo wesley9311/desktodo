@@ -30,6 +30,13 @@ autoreleasepool {
         exit(0)
     }
 
+    // 旧版兼容导出（仅 DEBUG）：供自动化验证回滚文件可被旧版读取（P1-4）
+    if let i = CommandLine.arguments.firstIndex(of: "--export-legacy"),
+       i + 1 < CommandLine.arguments.count {
+        let probe = AppDelegate()
+        exit(probe.buildLegacyExport(to: URL(fileURLWithPath: CommandLine.arguments[i + 1])) ? 0 : 1)
+    }
+
     // 诊断自证：把诊断文本打到 stdout，供 shell grep（仅 DEBUG）
     if CommandLine.arguments.contains("--diag") {
         let probe = AppDelegate()
