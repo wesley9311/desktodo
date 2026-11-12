@@ -1,0 +1,107 @@
+name: 边界与行为
+
+# 这个 CI 不是为了"跑通就行"，而是为了在 PR 阶段拦住三件事：
+#   1. 有人顺手加了一个网络出口（边界审计）
+#   2. 有人把"没记录"又算成 0 件（行为断言）
+#   3. 有人改坏了编译（Swift 构建）
+# 任何一条红，就不该合。
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']          # 打 tag 也跑一遍：发布物必须过同一套闸门
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    name: 边界审计
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      # 只检查"仓库里被跟踪的东西"，所以需要完整历史不需要，浅克隆即可
+      - name: 运行边界审计
+        run: ./tools/audit.sh
+
+  behavior:
+    name: 行为断言
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: 打包前端
+        run: ./tools/bundle.sh
+
+      - name: 检查打包产物是单个 IIFE（file:// 下不能用 module）
+        run: |
+          head -c 40 build/Resources/app.js | grep -q '(function () {' \
+            && echo "IIFE 包裹正常" \
+            || { echo "app.js 外层不是 IIFE"; exit 1; }
+
+      - name: 跑行为断言
+        env:
+          # macOS runner 自带 Chrome，但路径要显式给
+          CHROME_BIN: /Applications/Google Chrome.app/Contents/MacOS/Google Chrome
+        run: node tools/check.js
+
+      - name: 文档数字与实测一致
+        run: ./tools/docs-check.sh
+
+  build:
+    name: 编译（不签名）
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: swiftc 全量编译
+        run: |
+          # build/ 是产物目录、不入库，所以新克隆里没有它（第一版 CI 就栽在这）
+          mkdir -p build
+          swiftc -O -whole-module-optimization \
+            -target "$(uname -m)-apple-macos12.0" \
+            -o build/DeskTodo-ci \
+            src/*.swift \
+            -framework Cocoa -framework WebKit -framework EventKit
+          ls -lh build/DeskTodo-ci
+          vtool -show-build build/DeskTodo-ci | grep 'minos 12.0'
+
+      # 不在这里签名、不在这里发 release：
+      # 分发包必须由维护者在自己的机器上产出并贴 hash，
+      # 否则"官方构建"这四个字就没有对应的责任主体。
+
+  build-intel:
+    name: 编译 x86_64
+    runs-on: macos-15-intel
+    steps:
+      - uses: actions/checkout@v4
+      - name: swiftc 交叉编译 + 自检 + minos
+        run: |
+          mkdir -p build
+          swiftc -O -whole-module-optimization -target x86_64-apple-macos12.0 \
+            -o build/DeskTodo-inci src/*.swift \
+            -framework Cocoa -framework WebKit -framework EventKit
+          TMPHOME="$(mktemp -d)"
+          DESKTODO_TEST_HOME="$TMPHOME" ./build/DeskTodo-inci --selftest
+          rm -rf "$TMPHOME"
+          vtool -show-build build/DeskTodo-inci | grep 'minos 12.0'
+
+  meta:
+    name: 版本一致性
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: VERSION / Info.plist / CHANGELOG
+        run: |
+          V="$(tr -d '[:space:]' < VERSION)"
+          P="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' src/Info.plist)"
+          test "$V" = "$P" || { echo "VERSION=$V Info.plist=$P"; exit 1; }
+          grep -q "^## $V " CHANGELOG.md || { echo "CHANGELOG 缺少 $V 条目"; exit 1; }
+          echo "版本一致：$V"

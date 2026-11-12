@@ -1,0 +1,143 @@
+name: Release
+
+# 发布物只由 CI 从 tag 构建：本机出包只用于开发调试。
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  preflight:
+    name: 预检（四同步 / 措辞 / 闸门）
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: 取回 tag
+        run: git fetch --tags --force
+      - name: 预检
+        run: ./tools/release.sh
+
+  audit:
+    name: 边界审计
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - run: ./tools/audit.sh
+
+  behavior:
+    name: 行为断言
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: ./tools/bundle.sh
+      - name: 断言
+        env:
+          CHROME_BIN: /Applications/Google Chrome.app/Contents/MacOS/Google Chrome
+        run: node tools/check.js
+      - run: ./tools/docs-check.sh
+
+  build-arm64:
+    name: 编译 arm64
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: 编译 + 自检 + minos
+        run: |
+          mkdir -p build
+          swiftc -O -whole-module-optimization -target arm64-apple-macos12.0 \
+            -o build/DeskTodo-arm64 src/*.swift \
+            -framework Cocoa -framework WebKit -framework EventKit
+          TMPHOME="$(mktemp -d)"
+          DESKTODO_TEST_HOME="$TMPHOME" ./build/DeskTodo-arm64 --selftest
+          rm -rf "$TMPHOME"
+          vtool -show-build build/DeskTodo-arm64 | grep 'minos 12.0'
+
+  build-intel:
+    name: 编译 x86_64
+    runs-on: macos-15-intel
+    steps:
+      - uses: actions/checkout@v4
+      - name: 编译 + 自检 + minos
+        run: |
+          mkdir -p build
+          swiftc -O -whole-module-optimization -target x86_64-apple-macos12.0 \
+            -o build/DeskTodo-x86_64 src/*.swift \
+            -framework Cocoa -framework WebKit -framework EventKit
+          TMPHOME="$(mktemp -d)"
+          DESKTODO_TEST_HOME="$TMPHOME" ./build/DeskTodo-x86_64 --selftest
+          rm -rf "$TMPHOME"
+          vtool -show-build build/DeskTodo-x86_64 | grep 'minos 12.0'
+
+  package:
+    name: universal 打包 + 完整性
+    needs: [preflight, audit, behavior, build-arm64, build-intel]
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: 打包
+        run: ./tools/package.sh
+      - name: 完整性矩阵
+        run: |
+          DMG="$(ls dist/*.dmg | head -1)"
+          ./tools/integrity.sh --dmg "$DMG" --sums dist/SHA256SUMS.txt --source ci
+      - uses: actions/upload-artifact@v4
+        with:
+          name: desk-todo-dist
+          path: |
+            dist/*.dmg
+            dist/SHA256SUMS.txt
+          if-no-files-found: error
+
+  release:
+    name: 发布（Pre-release）
+    needs: package
+    # 只有 tag 触发的运行才发布；workflow_dispatch 只做干跑
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: macos-15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/download-artifact@v4
+        with:
+          name: desk-todo-dist
+          path: dist
+      - name: 提取 CHANGELOG 本节
+        run: |
+          VERSION="$(tr -d '[:space:]' < VERSION)"
+          awk -v v="$VERSION" '
+            $0 ~ "^## " v " " {on=1; print; next}
+            on && /^## / {exit}
+            on {print}
+          ' CHANGELOG.md > /tmp/notes.md
+          cat /tmp/notes.md
+      - name: 创建 Pre-release（不替换已有资产）
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            dist/*.dmg dist/SHA256SUMS.txt \
+            --title "DeskTodo $GITHUB_REF_NAME" \
+            --notes-file /tmp/notes.md \
+            --prerelease --verify-tag
+      - name: 下载回验 sha256
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p /tmp/dl
+          gh release download "$GITHUB_REF_NAME" -D /tmp/dl -p '*'
+          cd /tmp/dl && shasum -a 256 -c SHA256SUMS.txt

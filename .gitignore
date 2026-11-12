@@ -1,0 +1,46 @@
+# 只放三种东西：构建产物、本机私有的东西、系统垃圾。
+# 判断标准只有一句：**这条东西如果被别人看到，我会不会不舒服？** 会就进来。
+
+# ── 构建产物（能重建，不该有历史） ──────────────────────────
+build/
+dist/
+*.zip
+
+# ── 本机签名材料（私钥等价物，绝不能出门） ──────────────────
+*.keychain
+*.keychain-db
+*.p12
+*.pem
+*.key
+*.crt
+*.desktodo-signing-pass
+.desktodo-signing-pass
+*.mobileprovision
+
+# ── 真数据（在 ~/Library/Application Support/DeskTodo/，不该在这里） ──
+data*.json*
+data.backup-*.json
+data.corrupt-*.json
+data.bak.corrupt-*.json
+data.conflict-*.json
+snapshots/
+focus.json
+ledger.json
+ledger.bak.*
+backups/
+logs/
+SHA256SUMS.txt
+*.export.json
+
+# ── 旧快照与调试残留 ────────────────────────────────────────
+.snapshot/
+*.log
+dbg-*.json
+
+# ── 系统垃圾 ────────────────────────────────────────────────
+.DS_Store
+._*
+__MACOSX/
+.idea/
+.vscode/
+node_modules/

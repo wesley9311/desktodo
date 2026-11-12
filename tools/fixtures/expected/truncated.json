@@ -1,0 +1,1 @@
+{"fixture":"truncated","steps":[{"out":"ok","s":"save"},{"out":"ok","s":"save"},{"daily":1,"kept":1,"kind":"recovered","nodes":1,"parsed":true,"s":"load","tasks":-1,"v":2}]}

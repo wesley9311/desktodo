@@ -1,0 +1,1 @@
+{"fixture":"single-day","steps":[{"out":"ok","s":"save"},{"daily":1,"kept":0,"kind":"normal","nodes":1,"parsed":true,"s":"load","tasks":-1,"v":2},{"count":0,"s":"snapshots"}]}
