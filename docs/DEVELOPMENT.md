@@ -3,7 +3,7 @@
 ## 1. 结构
 
 ```
-src/*.swift        原生壳 18 个文件 / 4357 行
+src/*.swift        原生壳 18 个文件 / 4622 行
   main.swift                 入口、单实例守卫、自检模式
   AppDelegate.swift          状态与生命周期（存储状态、窗口、计时器）
   AppDelegate+Window.swift   窗口、缩放、拖拽
@@ -20,7 +20,7 @@ src/*.swift        原生壳 18 个文件 / 4357 行
   sources.swift              EventKit / knowledgeC / 前台 App 计时
   Session.swift              锁屏、熄屏、睡眠、屏保、会话
   DesktopDot.swift           圆点窗口
-src/js/01..10-*.js 页面 10 个分片 / 3911 行（构建时拼成单个 IIFE）
+src/js/01..10-*.js 页面 10 个分片 / 3913 行（构建时拼成单个 IIFE）
 src/styles.css     样式 926 行
 src/index.html     标记 90 行
 tools/             构建、审计、断言、打包、发布、完整性、文档校验

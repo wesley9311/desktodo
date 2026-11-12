@@ -38,8 +38,8 @@ echo
 echo "[3] 措辞（旧品牌 / 旧文件名；历史版本引用由 version-check 限定范围）"
 B="$(git grep -n "$BRAND" 2>/dev/null | head -1 || true)"
 [ -z "$B" ] && ok "没有旧品牌字面量" || bad "出现旧品牌字面量：$B"
-F="$(git grep -n "$OLD_FILE" 2>/dev/null | grep -v '^src/LegacyPaths.swift:' | head -3 || true)"
-[ -z "$F" ] && ok "旧文件名只出现在 LegacyPaths.swift（常量）" || bad "旧文件名出现在别处：$F"
+F="$(git grep -n "$OLD_FILE" 2>/dev/null | grep -v '^src/LegacyPaths.swift:' | grep -v '^CHANGELOG.md:' | grep -v '^docs/MANUAL.md:' | head -3 || true)"
+[ -z "$F" ] && ok "旧文件名只出现在 LegacyPaths.swift（常量）与 CHANGELOG / MANUAL（回滚说明）" || bad "旧文件名出现在别处：$F"
 
 echo
 echo "[4] 新提交规范（历史基准之后）"

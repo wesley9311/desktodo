@@ -2,7 +2,7 @@
 
 **桌面上一本只记「你给自己派的活，最后做成了什么样」的日账本。**
 
-`0.1.0` · MIT · macOS 12+ · Universal（Apple Silicon / Intel）· 195 条断言
+`0.1.1` · MIT · macOS 12+ · Universal（Apple Silicon / Intel）· 195 条断言
 
 ## 下载
 
@@ -57,8 +57,8 @@
 ## 代码结构
 
 ```
-src/*.swift              原生壳（4357 行 / 18 个文件）：窗口、圆点、菜单、桥、数据源
-src/js/01..10-*.js       页面（3911 行 / 10 个分片），构建时拼成单个 IIFE
+src/*.swift              原生壳（4622 行 / 18 个文件）：窗口、圆点、菜单、桥、数据源
+src/js/01..10-*.js       页面（3913 行 / 10 个分片），构建时拼成单个 IIFE
 src/styles.css           样式（926 行）
 tools/bundle.sh          分片 → 单文件（WKWebView 用 file://，不能用 ES module）
 tools/audit.sh           边界审计八类

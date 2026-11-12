@@ -87,9 +87,11 @@ open /Applications/DeskTodo.app
 
 ## 7. 回滚到上一版
 
-1. 先「导出账本…」留底。
-2. 从 Releases 下载上一版 dmg（历史包标为 Pre-release）。
-3. 拖进 Applications 覆盖，打开。
+旧版只读 `data.json`，不认现在的 `ledger.json`。所以回滚前必须先把新版账本落成旧版文件，否则旧版看到的是迁移那一刻的旧快照。
+
+1. 菜单 →「导出旧版兼容账本…」，存一份 `data.json`（不含 `meta` 段）。
+2. 菜单 →「打开数据文件夹」，把这份 `data.json` 复制进去，文件名保持 `data.json`。
+3. 先「导出账本…」留底，再从 Releases 下载上一版 dmg，拖进 Applications 覆盖并打开。
 
 数据兼容规则：账本 `schemaVersion` 高于当前应用认识的版本时，应用只读、不写入，并给出可读原因；可以用「导出账本…」把原文件带走。
 
