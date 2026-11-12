@@ -89,12 +89,19 @@ case "$OUT" in *new-data*) ok "新版数据未被旧文件影响" ;; *) bad "新
 rm -rf "$H" /tmp/dt-old.json
 
 echo "[11] 备份被篡改"
-H=$(mktemp -d); mkdir -p "$H/DeskTodo"
-echo '{"v":2,"nodes":[{"id":1,"type":"task","text":"a"}],"daily":{"2026-11-11":1}}' > "$H/DeskTodo/ledger.json"
-DESKTODO_TEST_HOME="$H" "$BIN" --review >/dev/null 2>&1
-NEWEST=$(ls "$H/DeskTodo/backups/" 2>/dev/null | grep '^ledger.bak.' | tail -1)
+# review 自 0.1.1 起是只读的（不再自动补备份/写索引），
+# 所以这里直接构造"账本 + 备份 + 索引"三件套，再篡改备份验证第 5 项。
+H=$(mktemp -d); mkdir -p "$H/DeskTodo/backups"
+BODY='{"v":2,"nodes":[{"id":1,"type":"task","text":"a"}],"daily":{"2026-11-11":1}}'
+printf '%s' "$BODY" > "$H/DeskTodo/ledger.json"
+BAK="$H/DeskTodo/backups/ledger.bak.20260101T000000.json"
+printf '%s' "$BODY" > "$BAK"
+HASH=$(shasum -a 256 "$BAK" | awk '{print $1}')
+BYTES=$(wc -c < "$BAK" | tr -d ' ')
+printf '{"entries":[{"file":"ledger.bak.20260101T000000.json","sha256":"%s","bytes":%s,"entries":1,"createdAt":"2026-01-01T00:00:00Z"}]}' "$HASH" "$BYTES" > "$H/DeskTodo/backups/index.json"
+printf 'x' >> "$BAK"
+NEWEST="ledger.bak.20260101T000000.json"
 if [ -n "$NEWEST" ]; then
-  printf 'x' >> "$H/DeskTodo/backups/$NEWEST"
   OUT=$(DESKTODO_TEST_HOME="$H" "$BIN" --review 2>/dev/null)
   case "$OUT" in *tampered*) ok "篡改被第 5 项拦下" ;; *) bad "篡改未被拦下" ;; esac
 else
