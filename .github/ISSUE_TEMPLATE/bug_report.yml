@@ -13,7 +13,7 @@ body:
     attributes:
       label: 版本
       description: 菜单 →「关于」里那串；或者 `grep CFBundleShortVersionString 浮窗待办.app/Contents/Info.plist`
-      placeholder: "0.1.0"
+      placeholder: "版本号 + 构建号（见「复制诊断信息」）"
     validations:
       required: true
 

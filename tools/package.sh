@@ -1,6 +1,10 @@
 #!/bin/bash
-# 打 universal 分发包：两次 swiftc → lipo → 组装 → 自检 → 由内向外签名 → dmg → sha256。
+# 打包：两次 swiftc → lipo → 组装 → 自检 → 由内向外签名 → dmg → sha256 → build-info。
 # 不碰 ~/Applications，不 push、不打 tag。CI 与本机共用这一条路径。
+#
+# 用法：./tools/package.sh [--channel local|release]
+#   local（默认）：本机开发包，文件名带 -local，不上传 Release
+#   release：正式发行物，要求 tag == HEAD 且工作区干净；由 CI 从 tag 调用
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -9,16 +13,47 @@ BUILD="$ROOT/build"
 DIST="$ROOT/dist"
 APP_NAME="DeskTodo"
 BIN="DeskTodo"
+CHANNEL="local"
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --channel) CHANNEL="${2:-}"; shift 2 ;;
+    --channel=*) CHANNEL="${1#--channel=}"; shift ;;
+    *) echo "未知参数：${1}（可用：--channel local|release）" >&2; exit 2 ;;
+  esac
+done
+case "$CHANNEL" in local|release) ;; *) echo "channel 只能是 local 或 release" >&2; exit 2 ;; esac
+
 VERSION="$(tr -d '[:space:]' < "$ROOT/VERSION")"
+CORE="${VERSION%%-*}"
 PLIST_VER="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$SRC/Info.plist" 2>/dev/null || echo '')"
-if [ "$VERSION" != "$PLIST_VER" ]; then
-  echo "版本不一致：VERSION=${VERSION}，Info.plist=$PLIST_VER" >&2
+if [ "$CORE" != "$PLIST_VER" ]; then
+  echo "版本不一致：VERSION 核心=${CORE}，Info.plist=$PLIST_VER" >&2
   exit 1
 fi
 
+SUFFIX="local"
+[ "$CHANNEL" = "release" ] && SUFFIX=""
+OUT="$DIST/$APP_NAME-$VERSION-universal${SUFFIX:+-$SUFFIX}.dmg"
 APP="$BUILD/pkg/$APP_NAME.app"
 STAGE="$BUILD/dmg"
-OUT="$DIST/$APP_NAME-$VERSION-universal.dmg"
+
+if [ "$CHANNEL" = "release" ]; then
+  if [ -n "$(git -C "$ROOT" status --porcelain)" ]; then
+    echo "release 通道要求工作区干净（打包前请提交）" >&2
+    exit 1
+  fi
+  if ! "$ROOT/tools/version-check.sh" --mode tag >/tmp/package-version.log 2>&1; then
+    cat /tmp/package-version.log >&2
+    echo "release 通道要求版本治理检查通过（tag == HEAD）" >&2
+    exit 1
+  fi
+else
+  if ! "$ROOT/tools/version-check.sh" --mode local >/tmp/package-version.log 2>&1; then
+    cat /tmp/package-version.log >&2
+    echo "本地包的版本治理检查失败" >&2
+    exit 1
+  fi
+fi
 
 echo "==> 前端"
 "$ROOT/tools/bundle.sh"
@@ -62,8 +97,11 @@ rm -rf "$TMPHOME"
 echo "==> 签名（由内向外，不用 --deep）"
 # ad-hoc 签名（--sign -）的产物永远无法公证；这不是"暂时不公证"，是这条路走不到公证。
 # hardened runtime 用 NO_HARDENED=1 可关闭（仅当实测发现它破坏 WKWebView 时使用）。
-SIGN_OPTS=(--force --sign -)
-if [ "${NO_HARDENED:-0}" != "1" ]; then SIGN_OPTS=(--force --options runtime --sign -); fi
+# 需要访问受保护资源时，在 src/DeskTodo.entitlements 提供 entitlement；有就自动带上。
+SIGN_OPTS=(--force)
+if [ "${NO_HARDENED:-0}" != "1" ]; then SIGN_OPTS+=(--options runtime); fi
+if [ -f "$SRC/DeskTodo.entitlements" ]; then SIGN_OPTS+=(--entitlements "$SRC/DeskTodo.entitlements"); fi
+SIGN_OPTS+=(--sign -)
 if [ -d "$APP/Contents/Frameworks" ]; then
   for fw in "$APP/Contents/Frameworks/"*.framework; do
     [ -e "$fw" ] || continue
@@ -97,5 +135,30 @@ fi
 echo "==> sha256"
 ( cd "$DIST" && shasum -a 256 "$(basename "$OUT")" > SHA256SUMS.txt && cat SHA256SUMS.txt )
 
+echo "==> build-info"
+SCHEMA="$(grep -oE 'storeSchemaVersion = [0-9]+' "$SRC/Storage.swift" | grep -oE '[0-9]+$' | head -1)"
+COMMIT="$(git -C "$ROOT" rev-parse HEAD 2>/dev/null || echo unknown)"
+DIRTY="false"; [ -n "$(git -C "$ROOT" status --porcelain 2>/dev/null)" ] && DIRTY="true"
+TOOLCHAIN="$(swiftc --version 2>/dev/null | head -1 | tr '\n' ' ')"
+CREATED="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+cat > "$DIST/build-info.json" <<JSON
+{
+  "version": "$VERSION",
+  "build": "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$SRC/Info.plist")",
+  "channel": "$CHANNEL",
+  "commit": "$COMMIT",
+  "dirty": $DIRTY,
+  "toolchain": "$TOOLCHAIN",
+  "schemaVersion": ${SCHEMA:-0},
+  "createdAt": "$CREATED",
+  "dmg": "$(basename "$OUT")"
+}
+JSON
+cat "$DIST/build-info.json"
+
 echo "==> 完成：$OUT"
-echo "    注意：未公证，spctl 会拒绝；用户首次需要在系统设置里手动允许。"
+if [ "$CHANNEL" = "release" ]; then
+  echo "    正式发行物；CI 从 tag 构建，本机不直接上传。"
+else
+  echo "    本地开发包（-local），不得上传 Release。"
+fi

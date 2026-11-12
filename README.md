@@ -70,6 +70,7 @@ tools/docs-check.sh      文档数字与实测一致
 tools/verify.sh          一键验证（审计 / 断言 / 自检 / 夹具 / 对抗）
 tools/adversarial.sh     18 项对抗审查里可自动化的部分
 tools/git-audit.sh       Git 对抗性审查（提交规范/标签/数据边界）
+tools/version-check.sh   版本治理检查（版本/构建号/schema/tag/历史引用）
 ```
 
 ## 自己验证这份构建

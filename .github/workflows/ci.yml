@@ -102,6 +102,9 @@ jobs:
         run: |
           V="$(tr -d '[:space:]' < VERSION)"
           P="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' src/Info.plist)"
-          test "$V" = "$P" || { echo "VERSION=$V Info.plist=$P"; exit 1; }
+          C="${V%%-*}"
+          test "$C" = "$P" || { echo "VERSION 核心=$C Info.plist=$P"; exit 1; }
           grep -q "^## $V " CHANGELOG.md || { echo "CHANGELOG 缺少 $V 条目"; exit 1; }
-          echo "版本一致：$V"
+          echo "版本一致：$V（核心 $C）"
+      - name: 版本治理（构建号格式/递增/唯一、schema、历史引用）
+        run: ./tools/version-check.sh --mode local

@@ -86,8 +86,8 @@ jobs:
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
-      - name: 打包
-        run: ./tools/package.sh
+      - name: 打包（正式发行物通道）
+        run: ./tools/package.sh --channel release
       - name: 完整性矩阵
         run: |
           DMG="$(ls dist/*.dmg | head -1)"
@@ -96,8 +96,9 @@ jobs:
         with:
           name: desk-todo-dist
           path: |
-            dist/*.dmg
+            dist/DeskTodo-*-universal.dmg
             dist/SHA256SUMS.txt
+            dist/build-info.json
           if-no-files-found: error
 
   release:
@@ -125,15 +126,21 @@ jobs:
             on {print}
           ' CHANGELOG.md > /tmp/notes.md
           cat /tmp/notes.md
-      - name: 创建 Pre-release（不替换已有资产）
+      - name: 校验 tag 与 VERSION 一致（不替换已有资产）
+        run: |
+          VERSION="$(tr -d '[:space:]' < VERSION)"
+          test "v$VERSION" = "$GITHUB_REF_NAME" || { echo "tag $GITHUB_REF_NAME 与 VERSION $VERSION 不一致"; exit 1; }
+          ls -l dist
+      - name: 创建 Pre-release（0.x/预发布一律不设 latest）
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh release create "$GITHUB_REF_NAME" \
-            dist/*.dmg dist/SHA256SUMS.txt \
+            dist/DeskTodo-*-universal.dmg dist/SHA256SUMS.txt dist/build-info.json \
             --title "DeskTodo $GITHUB_REF_NAME" \
             --notes-file /tmp/notes.md \
             --prerelease --verify-tag
+          # 0.x / 预发布：不执行 gh release edit --latest（GitHub 会拒绝）
       - name: 下载回验 sha256
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
