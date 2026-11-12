@@ -75,12 +75,15 @@ if [ -f "$PASSFILE" ] && [ -f "$SIGN_KEYCHAIN" ]; then
   security unlock-keychain -p "$(cat "$PASSFILE")" "$SIGN_KEYCHAIN" >/dev/null 2>&1 || true
 fi
 SIGNED=""
+# P0-1：hardened runtime 下访问日历/提醒事项必须带 entitlement，开发包与发布包保持一致
+ENT_OPT=()
+[ -f "$SRC/DeskTodo.entitlements" ] && ENT_OPT=(--entitlements "$SRC/DeskTodo.entitlements")
 if security find-identity -p codesigning "$SIGN_KEYCHAIN" 2>/dev/null | grep -q "$SIGN_ID"; then
-  codesign --force --deep --sign "$SIGN_ID" --keychain "$SIGN_KEYCHAIN" "$APP" >/dev/null
+  codesign --force --deep "${ENT_OPT[@]}" --sign "$SIGN_ID" --keychain "$SIGN_KEYCHAIN" "$APP" >/dev/null
   SIGNED="self"
   echo "    用固定证书签名（重建不掉权限）"
 elif [ "$ALLOW_ADHOC" = "1" ]; then
-  codesign --force --deep --sign - "$APP" >/dev/null
+  codesign --force --deep "${ENT_OPT[@]}" --sign - "$APP" >/dev/null
   SIGNED="adhoc"
   echo "    ad-hoc 签名（--adhoc 显式要求）"
   echo "    !! cdhash 每次重建都变 → 日历/提醒/完全磁盘访问会被系统清零，需要重新授权"
@@ -93,6 +96,13 @@ fi
 echo "==> 校验签名"
 codesign --verify --deep --strict "$APP"
 echo "    签名校验通过（${SIGNED}）"
+if [ -f "$SRC/DeskTodo.entitlements" ]; then
+  ENT="$(codesign -d --entitlements :- "$APP" 2>/dev/null || true)"
+  case "$ENT" in
+    *com.apple.security.personal-information.calendars*) echo "    entitlements 已带上（日历/提醒事项）" ;;
+    *) echo "!! 开发包签名里缺少日历 entitlement（P0-1）" >&2; exit 1 ;;
+  esac
+fi
 
 echo "==> 停掉正在跑的旧版本（避免更新后两个实例同时写一份数据）"
 if pgrep -f "$DEST/Contents/MacOS/$BIN_NAME" >/dev/null 2>&1; then

@@ -115,6 +115,20 @@ done
 codesign "${SIGN_OPTS[@]}" "$APP"
 codesign --verify --strict --verbose=2 "$APP"
 
+echo "==> 校验 entitlements（P0-1：日历 / 提醒事项）"
+[ -f "$SRC/DeskTodo.entitlements" ] || {
+  echo "!! 缺少 src/DeskTodo.entitlements：hardened runtime 下日历/提醒授权会被系统直接拒绝" >&2
+  exit 1
+}
+ENT="$(codesign -d --entitlements :- "$APP" 2>/dev/null || true)"
+for key in com.apple.security.personal-information.calendars com.apple.security.personal-information.reminders; do
+  case "$ENT" in
+    *"$key"*) ;;
+    *) echo "!! 签名里缺少 entitlement：$key" >&2; exit 1 ;;
+  esac
+done
+echo "    entitlements 含日历 + 提醒事项"
+
 echo "==> 组装 dmg 目录"
 mkdir -p "$STAGE"
 cp -R "$APP" "$STAGE/"
