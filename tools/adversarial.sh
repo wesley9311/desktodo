@@ -1,5 +1,5 @@
 #!/bin/bash
-# 18 项对抗审查里可自动化的部分。不可自动化的项打印「MANUAL/CI + 方法」，不写通过。
+# 19 项对抗审查里可自动化的部分。不可自动化的项打印「MANUAL/CI + 方法」，不写通过。
 # 用法：./tools/adversarial.sh [--binary <debug-binary>]
 set -uo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -34,12 +34,19 @@ echo "[3] 磁盘满"
 IMG=$(mktemp -u /tmp/dt-full.XXXXXX.dmg); MNT=$(mktemp -d /tmp/dt-mnt.XXXXXX)
 if hdiutil create -size 20m -fs APFS -volname dtfull "$IMG" >/dev/null 2>&1 && hdiutil attach "$IMG" -nobrowse -mountpoint "$MNT" >/dev/null 2>&1; then
   H="$MNT/home"; mkdir -p "$H/DeskTodo"; echo '{"v":2,"nodes":[]}' > "$H/DeskTodo/ledger.json"
+  BEFORE_FULL=$(cat "$H/DeskTodo/ledger.json" 2>/dev/null)
   dd if=/dev/zero of="$MNT/fill" bs=1k >/dev/null 2>&1 || true
   FREE_KB=$(df -k "$MNT" | awk 'NR==2{print $4}')
   OUT=$(DESKTODO_TEST_HOME="$H" "$BIN" --fixture empty 2>/dev/null)
+  AFTER_FULL=$(cat "$H/DeskTodo/ledger.json" 2>/dev/null)
   hdiutil detach "$MNT" >/dev/null 2>&1 || true
   case "$OUT" in
-    *'"out":"rejected"'*) ok "磁盘满时写入被拒；无半截主文件（剩余 ${FREE_KB}KB）" ;;
+    *'"out":"rejected"'*)
+      if [ "$BEFORE_FULL" = "$AFTER_FULL" ]; then
+        ok "磁盘满时写入被拒、主账本未被改；无半截主文件（剩余 ${FREE_KB}KB）"
+      else
+        bad "磁盘满时主账本被改写（剩余 ${FREE_KB}KB）"
+      fi ;;
     *) bad "磁盘满时行为异常（剩余 ${FREE_KB}KB）：$OUT" ;;
   esac
 else
@@ -87,6 +94,27 @@ echo '{"v":2,"nodes":[{"id":2,"type":"task","text":"old-data"}],"daily":{}}' > "
 OUT=$(DESKTODO_TEST_HOME="$H" "$BIN" --export /tmp/dt-old.json 2>/dev/null; cat /tmp/dt-old.json 2>/dev/null)
 case "$OUT" in *new-data*) ok "新版数据未被旧文件影响" ;; *) bad "新版数据被旧文件影响" ;; esac
 rm -rf "$H" /tmp/dt-old.json
+
+echo "[19] 备份目录不可写"
+# A1/A2 的进程级证据：第二次写入需要"覆盖前备份"，备份写不进去时必须整次拒写。
+H=$(mktemp -d); mkdir -p "$H/DeskTodo"
+DESKTODO_TEST_HOME="$H" "$BIN" --fixture empty >/dev/null 2>&1
+BEFORE_RW=$(cat "$H/DeskTodo/ledger.json" 2>/dev/null)
+CNT_RW_BEFORE=$(ls "$H/DeskTodo/backups" 2>/dev/null | wc -l | tr -d ' ')
+chmod 500 "$H/DeskTodo/backups"
+OUT_RW=$(DESKTODO_TEST_HOME="$H" "$BIN" --fixture empty 2>/dev/null)
+chmod 700 "$H/DeskTodo/backups"
+AFTER_RW=$(cat "$H/DeskTodo/ledger.json" 2>/dev/null)
+CNT_RW_AFTER=$(ls "$H/DeskTodo/backups" 2>/dev/null | wc -l | tr -d ' ')
+case "$OUT_RW" in *'"out":"rejected"'*) RW_REJ=1 ;; *) RW_REJ=0 ;; esac
+[ "$BEFORE_RW" = "$AFTER_RW" ] && RW_SAME=1 || RW_SAME=0
+[ "$CNT_RW_BEFORE" = "$CNT_RW_AFTER" ] && RW_CNT=1 || RW_CNT=0
+if [ "$RW_REJ$RW_SAME$RW_CNT" = "111" ]; then
+  ok "备份目录不可写时拒写，主账本与备份数量保持不变"
+else
+  bad "备份目录不可写时未 fail-closed（rej=$RW_REJ same=$RW_SAME cnt=$RW_CNT）"
+fi
+rm -rf "$H"
 
 echo "[11] 备份被篡改"
 # review 自 0.1.1 起是只读的（不再自动补备份/写索引），

@@ -524,6 +524,73 @@ extension AppDelegate {
         check("旧文件可读后下次启动迁移成功", FileManager.default.fileExists(atPath: retryStore.ledgerURL.path))
         try? FileManager.default.removeItem(at: migFail)
 
+        // ═══ A 组：故障注入（备份失败必须阻止覆盖 / 竞争 / 磁盘 schema）═══
+
+        // A1/A2：备份目录不可写 → 拒写，主账本与备份数量都不变
+        try? Data(good2.utf8).write(to: storeURL)
+        _ = store.load()
+        let backupCountA = store.backupFileList().count
+        _ = chmod(store.backupsURL.path, 0o500)
+        let saveNoBackup = writeStore("{\"v\":2,\"nodes\":[{\"id\":2,\"type\":\"task\",\"text\":\"b\"}]}")
+        _ = chmod(store.backupsURL.path, 0o700)
+        check("备份目录不可写时拒绝保存", saveNoBackup == .rejected)
+        check("备份失败后主账本未变", (try? String(contentsOf: storeURL, encoding: .utf8)) == good2)
+        check("备份失败后备份数量未变", store.backupFileList().count == backupCountA)
+
+        #if DEBUG
+        // A2：备份写后校验失败 → 同样拒写（故障注入）
+        try? Data(good2.utf8).write(to: storeURL)
+        _ = store.load()
+        let backupCountB = store.backupFileList().count
+        Store.testFaultBackupVerifyFail = true
+        let saveBadVerify = writeStore("{\"v\":2,\"nodes\":[]}")
+        Store.testFaultBackupVerifyFail = false
+        check("备份校验失败时拒绝保存", saveBadVerify == .rejected)
+        check("备份校验失败后主账本未变", (try? String(contentsOf: storeURL, encoding: .utf8)) == good2)
+        check("备份校验失败后备份数量未变", store.backupFileList().count == backupCountB)
+        #endif
+
+        // A4：同进程竞争（两个 Store 指向同一目录）
+        try? Data(good2.utf8).write(to: storeURL)
+        let s1 = Store(dataDirectory: supportDir); _ = s1.load()
+        let s2 = Store(dataDirectory: supportDir); _ = s2.load()
+        let s2Wrote = s2.save("{\"v\":2,\"nodes\":[{\"id\":3,\"type\":\"task\",\"text\":\"c\"}]}")
+        var sameProcConflict = false
+        if case .conflict = s1.save(good2) { sameProcConflict = true }
+        check("同进程竞争：新实例写入成功", s2Wrote == .ok)
+        check("同进程竞争：旧实例检测到冲突", sameProcConflict)
+
+        #if DEBUG
+        // A4：跨进程竞争（子进程 load→write 后，父进程再写必须报冲突）
+        try? Data(good2.utf8).write(to: storeURL)
+        _ = store.load()
+        if let exe = Bundle.main.executableURL {
+            let child = Process()
+            child.executableURL = exe
+            child.arguments = ["--fixture", "empty"]
+            child.environment = ProcessInfo.processInfo.environment
+            try? child.run()
+            child.waitUntilExit()
+            var crossConflict = false
+            if case .conflict = writeStore(good2) { crossConflict = true }
+            check("跨进程竞争：写入后检测到冲突", child.terminationStatus == 0 && crossConflict)
+        } else {
+            check("跨进程竞争：写入后检测到冲突", false)
+        }
+        #endif
+
+        // A3：磁盘 schema 高于当前时，直接调用 restore 也必须被拒（不能只信缓存 readOnly）
+        try? Data(good2.utf8).write(to: storeURL)
+        _ = store.load()
+        store.backupNow("a3")
+        let a3Target = store.backupFileList().last.map { store.backupsURL.appendingPathComponent($0) }
+        try? Data("{\"v\":3,\"nodes\":[]}".utf8).write(to: storeURL)   // 磁盘变 v3，内存仍可写
+        var a3Blocked = false
+        if let u = a3Target { a3Blocked = (store.restore(from: u).ok == false) }
+        check("磁盘 schema 更高时 restore 被拒", a3Blocked)
+        try? Data(good2.utf8).write(to: storeURL)
+        _ = store.load()
+
         // 清空
         try? Data("{\"2026-01-01\":{}}".utf8).write(to: store.focusURL)
         let failed = wipeAllData()

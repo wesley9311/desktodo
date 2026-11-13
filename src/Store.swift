@@ -42,6 +42,11 @@ final class Store {
     private var usedBackupNames = Set<String>()
     private let version = (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "dev"
 
+    #if DEBUG
+    /// 仅自检使用：强制"备份写后校验失败"，验证 fail-closed 路径。
+    static var testFaultBackupVerifyFail = false
+    #endif
+
     private let stampFmt: DateFormatter = {
         let f = DateFormatter()
         f.locale = Locale(identifier: "en_US_POSIX")
@@ -257,12 +262,28 @@ final class Store {
             }
 
             backupBeforeWriteIfNeeded(exists: exists)
-            // P2-1：先把"写之前的内容"备份成新文件（不删旧备份），主文件写成功后才轮转。
-            // 主文件写失败时，备份历史保持原样，不会出现"新备份已写、最旧一份被删、保存却失败"。
+            // A1/A2：账本已存在时，覆盖前必须先确认"备份成功且读回一致"。
+            // 备份失败就整次拒写——原账本与已有备份都不动，绝不出现"备份没写成、主账本却被覆盖"。
+            // P2-1：备份是新写一份（不删旧备份），主文件写成功后才轮转。
             var pendingBackup: URL?
             if exists, let cur = try? Data(contentsOf: ledgerURL) {
                 let dst = nextBackupURL()
-                if atomicWrite(cur, to: dst) { pendingBackup = dst }
+                if atomicWrite(cur, to: dst) {
+                    var verified = (try? Data(contentsOf: dst)) == cur
+                    #if DEBUG
+                    if Store.testFaultBackupVerifyFail { verified = false }
+                    #endif
+                    if verified {
+                        pendingBackup = dst
+                    } else {
+                        try? fm.removeItem(at: dst)
+                    }
+                }
+            }
+            if exists, pendingBackup == nil {
+                NSLog("DeskTodo store: rejected (pre-write backup failed)")
+                result = .rejected
+                return
             }
             if atomicWrite(data, to: ledgerURL) {
                 if exists {
@@ -452,6 +473,17 @@ final class Store {
             // 只读账本（更高 schema）不允许被旧备份覆盖
             guard !readOnly else {
                 NSLog("DeskTodo store: restore rejected (read-only)")
+                return
+            }
+            // A3：不信任缓存 readOnly —— 直接读盘确认当前账本的真实 schema。
+            // 即使调用方绕过 load()（缓存还是可写状态），磁盘上的高版本账本也不能被旧备份覆盖。
+            let diskText = try? String(contentsOf: ledgerURL, encoding: .utf8)
+            if let dt = diskText, let dv = schemaVersion(dt), dv > storeSchemaVersion {
+                NSLog("DeskTodo store: restore rejected (disk schema too new)")
+                return
+            }
+            if FileManager.default.fileExists(atPath: ledgerURL.path), diskText == nil {
+                NSLog("DeskTodo store: restore rejected (ledger unreadable)")
                 return
             }
             guard let d = try? Data(contentsOf: url),

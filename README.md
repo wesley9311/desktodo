@@ -57,7 +57,7 @@
 ## 代码结构
 
 ```
-src/*.swift              原生壳（4622 行 / 18 个文件）：窗口、圆点、菜单、桥、数据源
+src/*.swift              原生壳（4721 行 / 18 个文件）：窗口、圆点、菜单、桥、数据源
 src/js/01..10-*.js       页面（3913 行 / 10 个分片），构建时拼成单个 IIFE
 src/styles.css           样式（926 行）
 tools/bundle.sh          分片 → 单文件（WKWebView 用 file://，不能用 ES module）
@@ -68,7 +68,7 @@ tools/release.sh         发版前预检（不 push、不打 tag）
 tools/integrity.sh       产物完整性矩阵（9 项）
 tools/docs-check.sh      文档数字与实测一致
 tools/verify.sh          一键验证（审计 / 断言 / 自检 / 夹具 / 对抗）
-tools/adversarial.sh     18 项对抗审查里可自动化的部分
+tools/adversarial.sh     19 项对抗审查里可自动化的部分
 tools/git-audit.sh       Git 对抗性审查（提交规范/标签/数据边界）
 tools/version-check.sh   版本治理检查（版本/构建号/schema/tag/历史引用）
 ```
