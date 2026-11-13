@@ -85,9 +85,32 @@ jobs:
     needs: [preflight, audit, behavior, build-arm64, build-intel]
     runs-on: macos-15
     steps:
+      # 必须拿全历史与全部 tag：package.sh 的 release 通道会调 version-check --mode tag，
+      # 需要真实的 annotated tag 对象、peeled commit 与历史 tag 构建号（浅克隆不可靠）。
       - uses: actions/checkout@v4
-      - name: 打包（正式发行物通道）
-        run: ./tools/package.sh --channel release
+        with:
+          fetch-depth: 0
+      - name: 取回全部 tag
+        run: git fetch --tags --force
+      - name: 确认 tag 对象（annotated / peeled）
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            git rev-parse "refs/tags/${GITHUB_REF_NAME}^{}"
+            test "$(git cat-file -t "refs/tags/${GITHUB_REF_NAME}")" = "tag" || {
+              echo "tag 不是 annotated"; exit 1; }
+          else
+            echo "非 tag 触发（dispatch 干跑），跳过 tag 对象检查"
+          fi
+      - name: 打包（tag 走正式通道；dispatch 只干跑本地通道）
+        env:
+          GH_REF: ${{ github.ref }}
+        run: |
+          if [[ "$GH_REF" == refs/tags/* ]]; then
+            ./tools/package.sh --channel release
+          else
+            echo "workflow_dispatch 干跑：使用 local 通道，不产出正式资产"
+            ./tools/package.sh --channel local
+          fi
       - name: 完整性矩阵
         run: |
           DMG="$(ls dist/*.dmg | head -1)"
@@ -96,7 +119,7 @@ jobs:
         with:
           name: desk-todo-dist
           path: |
-            dist/DeskTodo-*-universal.dmg
+            dist/*.dmg
             dist/SHA256SUMS.txt
             dist/build-info.json
           if-no-files-found: error
