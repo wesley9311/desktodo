@@ -86,6 +86,11 @@ if ./tools/bundle.sh >/tmp/release-bundle.log 2>&1 && node tools/check.js >/tmp/
 else
   bad "行为断言失败（见 /tmp/release-check.log）"
 fi
+if ./tools/tcc-fixtures-test.sh >/tmp/release-tcc.log 2>&1; then
+  ok "TCC 日志解析/阶段判定夹具通过"
+else
+  bad "TCC 夹具失败（见 /tmp/release-tcc.log）"
+fi
 
 if [ "$FULL" = "1" ]; then
   echo

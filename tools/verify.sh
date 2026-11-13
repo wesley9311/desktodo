@@ -61,6 +61,11 @@ if DT_DEBUG_BIN="$PWD/build/DeskTodo-debug" ./tools/adversarial.sh >/tmp/v-adv.l
 else
   bad "见 /tmp/v-adv.log"
 fi
+if ./tools/tcc-fixtures-test.sh >/tmp/v-tcc.log 2>&1; then
+  ok "TCC 日志解析/阶段判定夹具 30 项"
+else
+  bad "TCC 夹具失败（见 /tmp/v-tcc.log）"
+fi
 
 echo "==> [7/9] 产物完整性"
 if [ -n "$ARTIFACT" ] && [ -f "$ARTIFACT" ]; then

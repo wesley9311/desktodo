@@ -108,3 +108,5 @@ jobs:
           echo "版本一致：$V（核心 $C）"
       - name: 版本治理（构建号格式/递增/唯一、schema、历史引用）
         run: ./tools/version-check.sh --mode local
+      - name: TCC 日志解析/阶段判定夹具（不依赖 VM）
+        run: ./tools/tcc-fixtures-test.sh

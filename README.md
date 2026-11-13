@@ -68,7 +68,9 @@ tools/release.sh         发版前预检（不 push、不打 tag）
 tools/integrity.sh       产物完整性矩阵（9 项）
 tools/docs-check.sh      文档数字与实测一致
 tools/verify.sh          一键验证（审计 / 断言 / 自检 / 夹具 / 对抗）
-tools/tcc-acceptance.sh  隔离 VM 真机 TCC 取证（拒绝在真实主机运行）
+tools/tcc-acceptance.sh  隔离 VM 真机 TCC 取证（多阶段；拒绝在真实主机运行）
+tools/tcc-log-parse.sh   TCC 日志解析与阶段判定纯函数（真实日志格式）
+tools/tcc-fixtures-test.sh  TCC 判定夹具（不依赖 VM，30 项）
 tools/branch-switch-rehearsal.sh  默认分支切换/回滚演练（只在 /tmp）
 tools/adversarial.sh     19 项对抗审查里可自动化的部分
 tools/git-audit.sh       Git 对抗性审查（提交规范/标签/数据边界）
