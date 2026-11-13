@@ -138,7 +138,7 @@ expect "identity 测试机不匹配应失败" 1 "$(run_identity "${TMP}/identity
 
 
 # ── 人工截图内容核验（不是只查文件存在）──
-SERIAL="$(tcc_machine_serial)"; MACHINE="${SERIAL:-test-mac}"
+SERIAL="$(tcc_machine_serial)"; MID="vm-1"
 mk_noise_png() { # file w h seed
   python3 - "$1" "$2" "$3" "$4" <<'PYPNG'
 import sys, zlib, struct, random
@@ -153,18 +153,19 @@ open(path, "wb").write(png)
 PYPNG
 }
 HASPY=0; command -v python3 >/dev/null 2>&1 && HASPY=1
-mk_manifest() { # dir caltitle remtitle calat remat [cal_dlg] [rem_dlg] [hash_override]
-  local dir="$1" ct="$2" rt="$3" ca="$4" ra="$5" cd="${6:-calendar}" rd="${7:-reminder}" ho="${8:-}"
+mk_manifest() { # dir caltitle remtitle calat remat [cal_dlg] [rem_dlg] [hash_override] [machine] [buttons]
+  local dir="$1" ct="$2" rt="$3" ca="$4" ra="$5" cd="${6:-calendar}" rd="${7:-reminder}" ho="${8:-}" mach="${9:-$MID}" btns="${10:-不允许 / 允许}"
   local ch rh
   ch="$(shasum -a 256 "$dir/shot-calendar-prompt.png" | awk '{print $1}')"
   rh="$(shasum -a 256 "$dir/shot-reminder-prompt.png" | awk '{print $1}')"
   [ -n "$ho" ] && ch="$ho"
   { printf 'file\tdialog\ttitle\tbuttons\tcaptured_at\tcaptured_by\tmachine\timage_sha256\n'
-    printf 'shot-calendar-prompt.png\t%s\t%s\t不允许 允许\t%s\tTester\t%s\t%s\n' "$cd" "$ct" "$ca" "$MACHINE" "$ch"
-    printf 'shot-reminder-prompt.png\t%s\t%s\t不允许 允许\t%s\tTester\t%s\t%s\n' "$rd" "$rt" "$ra" "$MACHINE" "$rh"
+    printf 'shot-calendar-prompt.png\t%s\t%s\t%s\t%s\tTester\t%s\t%s\n' "$cd" "$ct" "$btns" "$ca" "$mach" "$ch"
+    printf 'shot-reminder-prompt.png\t%s\t%s\t%s\t%s\tTester\t%s\t%s\n' "$rd" "$rt" "$btns" "$ra" "$mach" "$rh"
   } > "$dir/shots-manifest.tsv"
 }
-run_shots() { ( TCC_FAILS=0; tcc_verify_shots "$1" "$START_EPOCH" "$TMP/shots-verdict.tmp" ); }
+run_shots() { ( TCC_FAILS=0; tcc_verify_shots "$1" "$START_EPOCH" "$TMP/shots-verdict.tmp" "$MID" ); }
+run_structure() { ( TCC_FAILS=0; tcc_manifest_structure "$1" "$TMP/st-verdict.tmp" ); }
 
 if [ "$HASPY" = "1" ]; then
   OKDIR="$TMP/shots-ok"; mkdir -p "$OKDIR"
@@ -200,6 +201,31 @@ if [ "$HASPY" = "1" ]; then
   cp "$D/shot-calendar-prompt.png" "$D/shot-reminder-prompt.png"
   mk_manifest "$D" '“浮窗待办”想要访问你的日历' '“浮窗待办”想要访问你的提醒事项' "$CALT" "$REMT"
   expect "shots 空白占位图应失败" 1 "$(run_shots "$D" >/dev/null 2>&1; echo $?)"
+
+  expect "模板 tsv 本身可被严格解析（8 列/无空字段/各一条）" 0 "$(run_structure "${ROOT}/tools/tcc-shots-manifest.example.tsv" >/dev/null 2>&1; echo $?)"
+
+  D="$TMP/shots-9col"; cp -R "$OKDIR" "$D"; printf '不允许\t允许' > "$D/btns.tmp"
+  awk -F'\t' -v OFS='\t' 'NR==1{print;next}{$4=$4"\t"$4; print}' "$OKDIR/shots-manifest.tsv" > "$D/shots-manifest.tsv"
+  expect "manifest 列数多一列应失败" 1 "$(run_structure "$D/shots-manifest.tsv" >/dev/null 2>&1; echo $?)"
+
+  D="$TMP/shots-empty"; cp -R "$OKDIR" "$D"
+  awk -F'\t' -v OFS='\t' 'NR==1{print;next}{$3=""; print}' "$OKDIR/shots-manifest.tsv" > "$D/shots-manifest.tsv"
+  expect "manifest 空字段应失败" 1 "$(run_structure "$D/shots-manifest.tsv" >/dev/null 2>&1; echo $?)"
+
+  D="$TMP/shots-dupfile"; mkdir -p "$D"; { head -1 "$OKDIR/shots-manifest.tsv"; sed -n '2p' "$OKDIR/shots-manifest.tsv"; sed -n '2p' "$OKDIR/shots-manifest.tsv"; } > "$D/shots-manifest.tsv"
+  expect "manifest 重复 file 记录应失败" 1 "$(run_structure "$D/shots-manifest.tsv" >/dev/null 2>&1; echo $?)"
+
+  D="$TMP/shots-dupdialog"; mkdir -p "$D"; { head -1 "$OKDIR/shots-manifest.tsv"; sed -n '2p' "$OKDIR/shots-manifest.tsv"; sed -n '3p' "$OKDIR/shots-manifest.tsv" | awk -F'\t' -v OFS='\t' '{$1="shot-other.png"; $2="calendar"; print}'; } > "$D/shots-manifest.tsv"
+  expect "manifest 重复 dialog 记录应失败" 1 "$(run_structure "$D/shots-manifest.tsv" >/dev/null 2>&1; echo $?)"
+
+  D="$TMP/shots-denyonly"; cp -R "$OKDIR" "$D"; mk_manifest "$D" '“浮窗待办”想要访问你的日历' '“浮窗待办”想要访问你的提醒事项' "$CALT" "$REMT" calendar reminder "" "$MID" '不允许'
+  expect "shots 按钮只有「不允许」应失败" 1 "$(run_shots "$D" >/dev/null 2>&1; echo $?)"
+
+  D="$TMP/shots-denyonly-en"; cp -R "$OKDIR" "$D"; mk_manifest "$D" 'Calendar access request' 'Reminders access request' "$CALT" "$REMT" calendar reminder "" "$MID" "Don't Allow"
+  expect "shots 按钮只有 Don't Allow 应失败" 1 "$(run_shots "$D" >/dev/null 2>&1; echo $?)"
+
+  D="$TMP/shots-badmachine"; cp -R "$OKDIR" "$D"; mk_manifest "$D" '“浮窗待办”想要访问你的日历' '“浮窗待办”想要访问你的提醒事项' "$CALT" "$REMT" calendar reminder "" "other-machine" '不允许 / 允许'
+  expect "shots 机器标识不可验证/不匹配应失败" 1 "$(run_shots "$D" >/dev/null 2>&1; echo $?)"
 else
   echo "  · 跳过截图夹具（无 python3 生成测试 PNG）"
 fi

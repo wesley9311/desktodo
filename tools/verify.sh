@@ -62,7 +62,7 @@ else
   bad "见 /tmp/v-adv.log"
 fi
 if ./tools/tcc-fixtures-test.sh >/tmp/v-tcc.log 2>&1; then
-  ok "TCC 日志解析/阶段判定/截图核验夹具 39 项"
+  ok "TCC 日志解析/阶段判定/截图核验夹具 47 项"
 else
   bad "TCC 夹具失败（见 /tmp/v-tcc.log）"
 fi

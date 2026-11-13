@@ -261,8 +261,46 @@ tcc_png_dims() { # width height
   printf '%s %s' "${w:-0}" "${h:-0}"
 }
 
-tcc_verify_shots() { # evid start_epoch verdict
-  local evid="$1" start="$2" verdict="$3"
+# 严格解析 manifest 结构：表头 8 列、每行 8 列、字段非空、file/dialog 不重复
+tcc_manifest_structure() { # manifest verdict
+  local man="$1" verdict="$2" header line n c1 c2 c3 c4 c5 c6 c7 c8 rows=0
+  local seen_files="" seen_dlgs=""
+  local expect=$'file\tdialog\ttitle\tbuttons\tcaptured_at\tcaptured_by\tmachine\timage_sha256'
+  [ -f "$man" ] || { tcc_claim_fail "缺少 shots-manifest.tsv" "$verdict"; return 1; }
+  header="$(head -1 "$man")"
+  [ "$header" = "$expect" ] && tcc_claim_ok "manifest 表头严格 8 列且列名正确" "$verdict" || tcc_claim_fail "manifest 表头不正确（必须严格 8 列：${expect}）" "$verdict"
+  while IFS= read -r line || [ -n "$line" ]; do
+    [ -n "$line" ] || continue
+    rows=$((rows + 1))
+    n="$(printf '%s' "$line" | awk -F'\t' '{print NF}')"
+    if [ "$n" != "8" ]; then
+      tcc_claim_fail "manifest 第 ${rows} 行有 ${n} 列（必须 8 列；「不允许 / 允许」要放在同一个 buttons 字段）" "$verdict"
+      continue
+    fi
+    IFS=$'\t' read -r c1 c2 c3 c4 c5 c6 c7 c8 < <(printf '%s\n' "$line")
+    if [ -z "$c1" ] || [ -z "$c2" ] || [ -z "$c3" ] || [ -z "$c4" ] || [ -z "$c5" ] || [ -z "$c6" ] || [ -z "$c7" ] || [ -z "$c8" ]; then
+      tcc_claim_fail "manifest 第 ${rows} 行存在空字段" "$verdict"
+    fi
+    case "$c2" in calendar|reminder) ;; *) tcc_claim_fail "manifest 第 ${rows} 行 dialog 非法：$c2" "$verdict" ;; esac
+    case " ${seen_files} " in *" ${c1} "*) tcc_claim_fail "manifest 重复 file 记录：$c1" "$verdict" ;; esac
+    case " ${seen_dlgs} " in *" ${c2} "*) tcc_claim_fail "manifest 重复 dialog 记录：$c2" "$verdict" ;; esac
+    seen_files="${seen_files} ${c1}"; seen_dlgs="${seen_dlgs} ${c2}"
+  done < <(tail -n +2 "$man")
+  [ "$rows" -gt 0 ] || tcc_claim_fail "manifest 没有数据行" "$verdict"
+  case " ${seen_dlgs} " in *" calendar "*) ;; *) tcc_claim_fail "manifest 缺少 calendar 记录" "$verdict" ;; esac
+  case " ${seen_dlgs} " in *" reminder "*) ;; *) tcc_claim_fail "manifest 缺少 reminder 记录" "$verdict" ;; esac
+  [ "$TCC_FAILS" -eq 0 ] && return 0 || return 1
+}
+
+# 是否含"允许"按钮："不允许"/"Don't Allow"/"Deny" 单独出现不算
+tcc_has_allow_button() {
+  local s="$1" cleaned
+  cleaned="$(printf '%s' "$s" | sed -E "s/(不允许|不允許|Don'?t[[:space:]]+Allow|Don.t[[:space:]]+Allow|Deny|拒绝|拒絕)//gI")"
+  printf '%s' "$cleaned" | grep -qE '(^|[^不])允许|(^|[^A-Za-z])Allow|(^|[^A-Za-z])(OK|Ok|好)'
+}
+
+tcc_verify_shots() { # evid start_epoch verdict [machine_id]
+  local evid="$1" start="$2" verdict="$3" machine_id="${4:-}"
   local cal rem MAN h1 h2 serial row f dlg title buttons at by machine imghash img sig size dims w h
   : > "$verdict"
   cal="$evid/shot-calendar-prompt.png"; rem="$evid/shot-reminder-prompt.png"; MAN="$evid/shots-manifest.tsv"
@@ -272,9 +310,8 @@ tcc_verify_shots() { # evid start_epoch verdict
 
   for img in "$cal" "$rem"; do
     [ -f "$img" ] || continue
-    sig="$(head -c 8 "$img" | od -An -tx1 | tr -d ' ')"
-    TRIM_SIG="$(printf '%s' "$sig" | tr -d ' \n')"
-    case "$TRIM_SIG" in 89504e470d0a1a0a) tcc_claim_ok "$(basename "$img") 是合法 PNG" "$verdict" ;; *) tcc_claim_fail "$(basename "$img") 不是合法 PNG" "$verdict" ;; esac
+    sig="$(head -c 8 "$img" | od -An -tx1 | tr -d ' \n')"
+    case "$sig" in 89504e470d0a1a0a) tcc_claim_ok "$(basename "$img") 是合法 PNG" "$verdict" ;; *) tcc_claim_fail "$(basename "$img") 不是合法 PNG" "$verdict" ;; esac
     size="$(stat -f%z "$img" 2>/dev/null || echo 0)"
     [ "${size:-0}" -ge 15000 ] && tcc_claim_ok "$(basename "$img") 大小 ${size}B（非空白占位）" "$verdict" || tcc_claim_fail "$(basename "$img") 太小（${size}B），疑似空白/占位图" "$verdict"
     dims="$(tcc_png_dims "$img")"; w="${dims%% *}"; h="${dims##* }"
@@ -286,40 +323,36 @@ tcc_verify_shots() { # evid start_epoch verdict
     [ "$h1" != "$h2" ] && tcc_claim_ok "日历/提醒两张截图内容不同（不能复用同一张）" "$verdict" || tcc_claim_fail "日历/提醒截图完全相同，不能分别证明两个弹窗" "$verdict"
   fi
 
-  if [ ! -f "$MAN" ]; then
-    tcc_claim_fail "缺少 shots-manifest.tsv（需要逐图记录弹窗内容证据）" "$verdict"
+  if ! tcc_manifest_structure "$MAN" "$verdict"; then
     [ "$TCC_FAILS" -eq 0 ] && return 0 || return 1
   fi
-  local header; header="$(head -1 "$MAN")"
-  case "$header" in
-    *file*dialog*title*buttons*"captured_at"*"captured_by"*machine*image_sha256*)
-      tcc_claim_ok "shots-manifest.tsv 表头完整" "$verdict" ;;
-    *) tcc_claim_fail "shots-manifest.tsv 表头缺少必需列" "$verdict" ;;
-  esac
   serial="$(tcc_machine_serial)"
 
   local pair want_file want_dlg want_kw
   for pair in "calendar:shot-calendar-prompt.png:日历|Calendar|calendar" "reminder:shot-reminder-prompt.png:提醒事项|Reminders|reminder"; do
     want_dlg="${pair%%:*}"; pair="${pair#*:}"; want_file="${pair%%:*}"; want_kw="${pair#*:}"
-    row="$(grep -E "^${want_file}	" "$MAN" | head -1 || true)"
+    row="$(awk -F'\t' -v f="$want_file" 'NR>1 && $1==f {print; exit}' "$MAN")"
     if [ -z "$row" ]; then
       tcc_claim_fail "manifest 缺少 ${want_file} 行" "$verdict"; continue
     fi
     f=""; dlg=""; title=""; buttons=""; at=""; by=""; machine=""; imghash=""
-    while IFS=$'\t' read -r a b c d e g i j; do
-      f="$a"; dlg="$b"; title="$c"; buttons="$d"; at="$e"; by="$g"; machine="$i"; imghash="$j"
-    done < <(printf '%s\n' "$row")
+    IFS=$'\t' read -r f dlg title buttons at by machine imghash < <(printf '%s\n' "$row")
     [ "$f" = "$want_file" ] && tcc_claim_ok "${want_file} 文件名/行首一致" "$verdict" || tcc_claim_fail "${want_file} 行首文件名不一致：$f" "$verdict"
     [ "$dlg" = "$want_dlg" ] && tcc_claim_ok "${want_file} dialog=${want_dlg}" "$verdict" || tcc_claim_fail "${want_file} dialog 字段错误：$dlg" "$verdict"
     if printf '%s' "$title" | grep -qE "$want_kw"; then tcc_claim_ok "${want_file} 标题命中关键词：$title" "$verdict"; else tcc_claim_fail "${want_file} 标题未命中关键词（$title）" "$verdict"; fi
-    if printf '%s' "$buttons" | grep -qE '允许|Allow|好|OK'; then tcc_claim_ok "${want_file} 按钮含允许类按钮：$buttons" "$verdict"; else tcc_claim_fail "${want_file} 按钮未记录允许类按钮（$buttons）" "$verdict"; fi
+    if tcc_has_allow_button "$buttons"; then tcc_claim_ok "${want_file} 按钮字段含明确的允许按钮：$buttons" "$verdict"; else tcc_claim_fail "${want_file} 按钮字段不含明确的允许按钮（仅「不允许/Don't Allow」不算）：$buttons" "$verdict"; fi
     local at_epoch=""
     [ -n "$at" ] && at_epoch="$(tcc_epoch_of_ts "$at")"
     if [ -n "$at_epoch" ] && [ "$at_epoch" -ge "$start" ] 2>/dev/null; then tcc_claim_ok "${want_file} 拍摄时间在本次测试开始之后" "$verdict"; else tcc_claim_fail "${want_file} 拍摄时间缺失/早于本次测试开始（$at）" "$verdict"; fi
     [ -n "$by" ] && tcc_claim_ok "${want_file} 拍摄人已记录" "$verdict" || tcc_claim_fail "${want_file} 缺少拍摄人" "$verdict"
-    [ -n "$machine" ] && tcc_claim_ok "${want_file} 机器已记录：$machine" "$verdict" || tcc_claim_fail "${want_file} 缺少机器信息" "$verdict"
-    if [ -n "$serial" ] && [ -n "$machine" ] && [ "$machine" != "$serial" ]; then
-      tcc_claim_fail "${want_file} 机器序列号与本机不一致（$machine != $serial）" "$verdict"
+    [ -n "$machine" ] && tcc_claim_ok "${want_file} 机器标识已记录：$machine" "$verdict" || tcc_claim_fail "${want_file} 缺少机器标识" "$verdict"
+    # 机器标识必须可验证：硬件序列号，或（无序列号时）显式测试设备标识；不能静默跳过
+    if [ -n "$serial" ] && [ -n "$machine" ] && [ "$machine" = "$serial" ]; then
+      tcc_claim_ok "${want_file} 机器序列号与本机一致" "$verdict"
+    elif [ -n "$machine_id" ] && [ -n "$machine" ] && [ "$machine" = "$machine_id" ]; then
+      tcc_claim_ok "${want_file} 机器标识与测试设备标识一致（${machine_id}）" "$verdict"
+    else
+      tcc_claim_fail "${want_file} 机器标识无法验证/不匹配（machine=${machine:-空} serial=${serial:-不可读} test_id=${machine_id:-空}）" "$verdict"
     fi
     local fh; fh="$(shasum -a 256 "$evid/$f" 2>/dev/null | awk '{print $1}')"
     [ -n "$imghash" ] && [ "$imghash" = "$fh" ] && tcc_claim_ok "${want_file} 图片哈希与 manifest 一致" "$verdict" || tcc_claim_fail "${want_file} 图片哈希与 manifest 不一致" "$verdict"

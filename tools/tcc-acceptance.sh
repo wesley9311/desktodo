@@ -174,7 +174,7 @@ if [ "${MODE}" = "collect" ]; then
   pgrep -fl "DeskTodo.app/Contents/MacOS/DeskTodo" > "${EVID}/05-process.txt" 2>&1 || true
 
   SHOTS=0
-  if ( TCC_FAILS=0; tcc_verify_shots "${EVID}" "${ID_START_EPOCH}" "${EVID}/08-shots-verdict.txt" ); then SHOTS=1; fi
+  if ( TCC_FAILS=0; tcc_verify_shots "${EVID}" "${ID_START_EPOCH}" "${EVID}/08-shots-verdict.txt" "${TEST_ID}" ); then SHOTS=1; fi
   TCC_FAILS=0
   if tcc_judge_collect "${EVID}/03-eventkit-log.txt" "${EVID}/04-tcc-log.txt" "${EVID}/90-verdict.txt" "${REQUIRE_EVENTS}" "${SHOTS}"; then
     tcc_write_manifest "${EVID}"
