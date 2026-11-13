@@ -19,7 +19,7 @@ trap cleanup EXIT
 [ -d "$LEGACY/.git" ] || { echo "!! 旧历史仓库不存在：$LEGACY" >&2; exit 2; }
 echo "演练目录：$WORK"
 
-# 1) 造一个"远端"：旧 main + 新 clean-main + v0.1.0 tag
+# 1) 造一个"远端"：旧 main + 新 clean-main + 既有的 release tag
 git init -q --bare "$BARE"
 git init -q "$REPO"
 cd "$REPO"
@@ -29,12 +29,14 @@ git remote add newrepo "$ROOT"
 git fetch -q legacy main:refs/remotes/legacy/main
 git fetch -q newrepo main:refs/remotes/newrepo/main
 OLD_SHA="$(git rev-parse refs/remotes/legacy/main)"
+REL_TAG="$(git -C "$LEGACY" tag -l 'v[0-9]*' --sort=-v:refname | head -1)"
+[ -n "$REL_TAG" ] || { echo "!! 旧历史仓库没有可参照的 release tag" >&2; exit 2; }
 NEW_SHA="$(git rev-parse refs/remotes/newrepo/main)"
 echo "  旧历史 = $(git rev-parse --short "$OLD_SHA")　新历史 = $(git rev-parse --short "$NEW_SHA")"
 git push -q origin "$OLD_SHA":refs/heads/main "$NEW_SHA":refs/heads/clean-main
-git tag -d v0.1.0 >/dev/null 2>&1 || true   # fetch 可能带回了远端 tag；演练里重建一个一致的
-git tag -a v0.1.0 -m "DeskTodo 0.1.0" "$OLD_SHA"
-git push -q origin refs/tags/v0.1.0
+git tag -d "$REL_TAG" >/dev/null 2>&1 || true   # fetch 可能带回了远端 tag；演练里重建一个一致的
+git tag -a "$REL_TAG" -m "DeskTodo release tag (rehearsal)" "$OLD_SHA"
+git push -q origin "refs/tags/$REL_TAG"
 git --git-dir="$BARE" symbolic-ref HEAD refs/heads/main
 
 # 2) 模拟 allow_deletions=false
@@ -85,9 +87,9 @@ HEADS="$(git --git-dir="$BARE" for-each-ref --format='%(refname:short)' refs/hea
 [ "$HEADS" = "main main-legacy " ] && ok "分支集合 = main + main-legacy" || bad "分支集合异常：$HEADS"
 [ "$(git --git-dir="$BARE" rev-parse main)" = "$NEW_SHA" ] && ok "main = 新历史" || bad "main 不指向新历史"
 [ "$(git --git-dir="$BARE" rev-parse main-legacy)" = "$OLD_SHA" ] && ok "main-legacy = 旧历史" || bad "main-legacy 不指向旧历史"
-BARE_TAG="$(git --git-dir="$BARE" rev-parse "refs/tags/v0.1.0^{commit}" 2>/dev/null || true)"
-[ "$BARE_TAG" = "$OLD_SHA" ] && ok "v0.1.0 仍指向旧提交（未受影响）" || bad "tag 受影响（bare=${BARE_TAG} old=${OLD_SHA}）"
-git --git-dir="$BARE" cat-file -e "v0.1.0^{commit}" && ok "tag 对象可解析" || bad "tag 对象丢失"
+BARE_TAG="$(git --git-dir="$BARE" rev-parse "refs/tags/$REL_TAG^{commit}" 2>/dev/null || true)"
+[ "$BARE_TAG" = "$OLD_SHA" ] && ok "已有 release tag 仍指向旧提交（未受影响）" || bad "tag 受影响（bare=${BARE_TAG} old=${OLD_SHA}）"
+git --git-dir="$BARE" cat-file -e "refs/tags/$REL_TAG^{commit}" && ok "tag 对象可解析" || bad "tag 对象丢失"
 
 echo
 echo "[5] 回滚：反向更名（同样无 force）"
@@ -106,7 +108,7 @@ HEADS2="$(git --git-dir="$BARE" for-each-ref --format='%(refname:short)' refs/he
 [ "$HEADS2" = "clean-main main " ] && ok "回滚后分支集合 = main + clean-main" || bad "回滚后分支集合异常：$HEADS2"
 [ "$(git --git-dir="$BARE" rev-parse main)" = "$OLD_SHA" ] && ok "回滚后 main = 旧历史" || bad "回滚后 main 不正确"
 [ "$(git --git-dir="$BARE" rev-parse clean-main)" = "$NEW_SHA" ] && ok "回滚后 clean-main = 新历史" || bad "回滚后 clean-main 不正确"
-[ "$(git --git-dir="$BARE" rev-parse v0.1.0^{commit})" = "$OLD_SHA" ] && ok "回滚后 tag 仍完好" || bad "回滚后 tag 异常"
+[ "$(git --git-dir="$BARE" rev-parse "refs/tags/$REL_TAG^{commit}")" = "$OLD_SHA" ] && ok "回滚后 tag 仍完好" || bad "回滚后 tag 异常"
 
 echo
 echo "演练结果：PASS=$PASS FAIL=$FAIL"
