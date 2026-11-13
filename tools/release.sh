@@ -30,11 +30,22 @@ note() { printf '    %s\n' "$1"; }
 VERSION="$(tr -d '[:space:]' < VERSION)"
 TAG="v$VERSION"
 
-# tag 构建 → tag 模式；main/本地 → main 模式（tag 作为祖先即可）
-if [ "${GITHUB_REF_TYPE:-}" = "tag" ]; then
+# 模式判定：
+#   tag 触发                → tag
+#   branch 触发且已有本版本 tag → main（发布后复验；tag 允许是祖先）
+#   branch 触发且还没有本版本 tag → local（发布前 workflow_dispatch 干跑）
+#   本地未打 tag             → local；本地 tag==HEAD → tag
+if [ -n "${RELEASE_MODE:-}" ]; then
+  VMODE="$RELEASE_MODE"
+elif [ "${GITHUB_REF_TYPE:-}" = "tag" ]; then
   VMODE="tag"
 elif [ "${GITHUB_REF_TYPE:-}" = "branch" ]; then
-  VMODE="main"
+  if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null 2>&1 \
+     && git merge-base --is-ancestor "$TAG" HEAD 2>/dev/null; then
+    VMODE="main"
+  else
+    VMODE="local"   # 发布前干跑：还没有本版本 tag，不要求 tag 存在
+  fi
 elif git rev-parse -q --verify "refs/tags/$TAG" >/dev/null 2>&1 \
   && [ "$(git rev-list -n1 "$TAG")" = "$(git rev-parse HEAD)" ]; then
   VMODE="tag"
