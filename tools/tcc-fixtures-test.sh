@@ -61,28 +61,28 @@ expect "时间过滤：相等边界包含、旧记录排除" 0 "${RC}"
 # ── collect ──
 printf '%s\n%s\n%s\n' "${CB_CAL}" "${CB_REM}" "${DATA_OK}" > "${TMP}/collect-ok.log"
 printf 'prompt evidence: Prompting policy for hardened runtime; kTCCServiceCalendar\n' > "${TMP}/tcc-prompt.txt"
-expect "collect 正向真实格式" 0 "$(run_collect "${TMP}/collect-ok.log" "${TMP}/tcc-prompt.txt" 1 0 >/dev/null; echo $?)"
+expect "collect 正向真实格式" 0 "$(run_collect "${TMP}/collect-ok.log" "${TMP}/tcc-prompt.txt" 1 1 >/dev/null; echo $?)"
 
 printf '%s\n%s\n2026-11-13 12:00:01 +0800 ext cal=ok/2/2d\n' "${CB_CAL}" "${CB_REM}" > "${TMP}/collect-norem.log"
-expect "collect 缺 rem 字段应失败" 1 "$(run_collect "${TMP}/collect-norem.log" "${TMP}/tcc-prompt.txt" 1 0 >/dev/null; echo $?)"
+expect "collect 缺 rem 字段应失败" 1 "$(run_collect "${TMP}/collect-norem.log" "${TMP}/tcc-prompt.txt" 1 1 >/dev/null; echo $?)"
 
 printf '2026-11-13 11:59:59 +0800 %s\n' "${DATA_OK}" > "${TMP}/collect-old.log"
-expect "collect 旧日志（启动前）应失败" 1 "$(run_collect "${TMP}/collect-old.log" "${TMP}/tcc-prompt.txt" 1 0 >/dev/null; echo $?)"
+expect "collect 旧日志（启动前）应失败" 1 "$(run_collect "${TMP}/collect-old.log" "${TMP}/tcc-prompt.txt" 1 1 >/dev/null; echo $?)"
 
 printf '%s\n%s\n2026-11-13 12:00:00 +0800 ext cal=ok/2/2d rem=ok/1open/0late\n' "${CB_CAL}" "${CB_REM}" > "${TMP}/collect-eq.log"
-expect "collect 起始时刻边界应通过" 0 "$(run_collect "${TMP}/collect-eq.log" "${TMP}/tcc-prompt.txt" 1 0 >/dev/null; echo $?)"
+expect "collect 起始时刻边界应通过" 0 "$(run_collect "${TMP}/collect-eq.log" "${TMP}/tcc-prompt.txt" 1 1 >/dev/null; echo $?)"
 
 : > "${TMP}/tcc-empty.txt"
 expect "collect tccd 被过滤：无截图应失败" 1 "$(run_collect "${TMP}/collect-ok.log" "${TMP}/tcc-empty.txt" 1 0 >/dev/null; echo $?)"
 expect "collect tccd 被过滤：截图+回调应通过" 0 "$(run_collect "${TMP}/collect-ok.log" "${TMP}/tcc-empty.txt" 1 1 >/dev/null; echo $?)"
 
 printf '%s\n%s\n2026-11-13 12:00:01 +0800 ext cal=ok/2/2 rem=ok/1open/0late\n' "${CB_CAL}" "${CB_REM}" > "${TMP}/collect-badfmt.log"
-expect "collect 格式变化（缺 d）应失败" 1 "$(run_collect "${TMP}/collect-badfmt.log" "${TMP}/tcc-prompt.txt" 1 0 >/dev/null; echo $?)"
+expect "collect 格式变化（缺 d）应失败" 1 "$(run_collect "${TMP}/collect-badfmt.log" "${TMP}/tcc-prompt.txt" 1 1 >/dev/null; echo $?)"
 
 printf 'requires entitlement com.apple.security.personal-information.calendars\nPrompting policy\n' > "${TMP}/tcc-missing-ent.txt"
-expect "collect entitlement 缺失应失败" 1 "$(run_collect "${TMP}/collect-ok.log" "${TMP}/tcc-missing-ent.txt" 1 0 >/dev/null; echo $?)"
+expect "collect entitlement 缺失应失败" 1 "$(run_collect "${TMP}/collect-ok.log" "${TMP}/tcc-missing-ent.txt" 1 1 >/dev/null; echo $?)"
 
-expect "collect 日志文件不存在应失败" 1 "$(run_collect "${TMP}/nope.log" "${TMP}/tcc-prompt.txt" 1 0 >/dev/null; echo $?)"
+expect "collect 日志文件不存在应失败" 1 "$(run_collect "${TMP}/nope.log" "${TMP}/tcc-prompt.txt" 1 1 >/dev/null; echo $?)"
 
 # ── restart ──
 printf '%s\n%s\n' '2026-11-13 12:10:00 +0800 ext cal=ok/2/2d rem=ok/1open/0late' '2026-11-13 12:10:01 +0800 ext cal=ok/2/2d rem=ok/1open/0late' > "${TMP}/restart-ok.log"
@@ -135,6 +135,75 @@ expect "identity 未知字段应失败" 1 "$(run_identity "${TMP}/id-unknown.env
 sed 's/^CDHASH=.*/CDHASH=xyz/' "${TMP}/identity.env" > "${TMP}/id-badhash.env"
 expect "identity CDHash 非法应失败" 1 "$(run_identity "${TMP}/id-badhash.env"; echo $?)"
 expect "identity 测试机不匹配应失败" 1 "$(run_identity "${TMP}/identity.env" other-vm; echo $?)"
+
+
+# ── 人工截图内容核验（不是只查文件存在）──
+SERIAL="$(tcc_machine_serial)"; MACHINE="${SERIAL:-test-mac}"
+mk_noise_png() { # file w h seed
+  python3 - "$1" "$2" "$3" "$4" <<'PYPNG'
+import sys, zlib, struct, random
+path, w, h, seed = sys.argv[1], int(sys.argv[2]), int(sys.argv[3]), int(sys.argv[4])
+random.seed(seed)
+raw = b"".join(b"\x00" + bytes(random.getrandbits(8) for _ in range(w*3)) for _ in range(h))
+def chunk(t, d):
+    c = t + d
+    return struct.pack(">I", len(d)) + c + struct.pack(">I", zlib.crc32(c) & 0xffffffff)
+png = b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 2, 0, 0, 0)) + chunk(b"IDAT", zlib.compress(raw, 6)) + chunk(b"IEND", b"")
+open(path, "wb").write(png)
+PYPNG
+}
+HASPY=0; command -v python3 >/dev/null 2>&1 && HASPY=1
+mk_manifest() { # dir caltitle remtitle calat remat [cal_dlg] [rem_dlg] [hash_override]
+  local dir="$1" ct="$2" rt="$3" ca="$4" ra="$5" cd="${6:-calendar}" rd="${7:-reminder}" ho="${8:-}"
+  local ch rh
+  ch="$(shasum -a 256 "$dir/shot-calendar-prompt.png" | awk '{print $1}')"
+  rh="$(shasum -a 256 "$dir/shot-reminder-prompt.png" | awk '{print $1}')"
+  [ -n "$ho" ] && ch="$ho"
+  { printf 'file\tdialog\ttitle\tbuttons\tcaptured_at\tcaptured_by\tmachine\timage_sha256\n'
+    printf 'shot-calendar-prompt.png\t%s\t%s\t不允许 允许\t%s\tTester\t%s\t%s\n' "$cd" "$ct" "$ca" "$MACHINE" "$ch"
+    printf 'shot-reminder-prompt.png\t%s\t%s\t不允许 允许\t%s\tTester\t%s\t%s\n' "$rd" "$rt" "$ra" "$MACHINE" "$rh"
+  } > "$dir/shots-manifest.tsv"
+}
+run_shots() { ( TCC_FAILS=0; tcc_verify_shots "$1" "$START_EPOCH" "$TMP/shots-verdict.tmp" ); }
+
+if [ "$HASPY" = "1" ]; then
+  OKDIR="$TMP/shots-ok"; mkdir -p "$OKDIR"
+  mk_noise_png "$OKDIR/shot-calendar-prompt.png" 800 600 1
+  mk_noise_png "$OKDIR/shot-reminder-prompt.png" 800 600 2
+  CALT='2026-11-13 12:05:00 +0800'; REMT='2026-11-13 12:06:00 +0800'
+  mk_manifest "$OKDIR" '“浮窗待办”想要访问你的日历' '“浮窗待办”想要访问你的提醒事项' "$CALT" "$REMT"
+  expect "shots 正向（日历/提醒分别截图+manifest）" 0 "$(run_shots "$OKDIR" >/dev/null 2>&1; echo $?)"
+
+  D="$TMP/shots-norem"; cp -R "$OKDIR" "$D"; rm -f "$D/shot-reminder-prompt.png"
+  expect "shots 缺少提醒弹窗截图应失败" 1 "$(run_shots "$D" >/dev/null 2>&1; echo $?)"
+
+  D="$TMP/shots-dup"; cp -R "$OKDIR" "$D"; cp "$D/shot-calendar-prompt.png" "$D/shot-reminder-prompt.png"; mk_manifest "$D" '“浮窗待办”想要访问你的日历' '“浮窗待办”想要访问你的提醒事项' "$CALT" "$REMT"
+  expect "shots 两图相同应失败" 1 "$(run_shots "$D" >/dev/null 2>&1; echo $?)"
+
+  D="$TMP/shots-badtitle"; cp -R "$OKDIR" "$D"; mk_manifest "$D" '某个弹窗' '“浮窗待办”想要访问你的提醒事项' "$CALT" "$REMT"
+  expect "shots 日历标题未命中关键词应失败" 1 "$(run_shots "$D" >/dev/null 2>&1; echo $?)"
+
+  D="$TMP/shots-baddlg"; cp -R "$OKDIR" "$D"; mk_manifest "$D" '“浮窗待办”想要访问你的日历' '“浮窗待办”想要访问你的提醒事项' "$CALT" "$REMT" reminder reminder
+  expect "shots dialog 字段错配应失败" 1 "$(run_shots "$D" >/dev/null 2>&1; echo $?)"
+
+  D="$TMP/shots-oldtime"; cp -R "$OKDIR" "$D"; mk_manifest "$D" '“浮窗待办”想要访问你的日历' '“浮窗待办”想要访问你的提醒事项' '2026-11-13 03:00:00 +0800' "$REMT"
+  expect "shots 拍摄时间早于测试开始应失败" 1 "$(run_shots "$D" >/dev/null 2>&1; echo $?)"
+
+  D="$TMP/shots-badhash"; cp -R "$OKDIR" "$D"; mk_manifest "$D" '“浮窗待办”想要访问你的日历' '“浮窗待办”想要访问你的提醒事项' "$CALT" "$REMT" calendar reminder "$(printf '0%.0s' $(seq 1 64))"
+  expect "shots 图片哈希与 manifest 不一致应失败" 1 "$(run_shots "$D" >/dev/null 2>&1; echo $?)"
+
+  D="$TMP/shots-noheader"; cp -R "$OKDIR" "$D"; tail -n +2 "$D/shots-manifest.tsv" > "$D/shots-manifest.tsv.tmp"; mv "$D/shots-manifest.tsv.tmp" "$D/shots-manifest.tsv"
+  expect "shots manifest 缺表头应失败" 1 "$(run_shots "$D" >/dev/null 2>&1; echo $?)"
+
+  D="$TMP/shots-blank"; mkdir -p "$D"
+  printf 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==' | base64 -D > "$D/shot-calendar-prompt.png" 2>/dev/null || true
+  cp "$D/shot-calendar-prompt.png" "$D/shot-reminder-prompt.png"
+  mk_manifest "$D" '“浮窗待办”想要访问你的日历' '“浮窗待办”想要访问你的提醒事项' "$CALT" "$REMT"
+  expect "shots 空白占位图应失败" 1 "$(run_shots "$D" >/dev/null 2>&1; echo $?)"
+else
+  echo "  · 跳过截图夹具（无 python3 生成测试 PNG）"
+fi
+
 
 echo
 echo "夹具结果：PASS=${PASS} FAIL=${FAIL}"

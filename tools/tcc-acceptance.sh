@@ -117,6 +117,8 @@ if [ "${MODE}" = "prepare" ]; then
     echo "== entitlements =="; codesign -d --entitlements :- "${SRC_APP}" 2>&1
     echo "== spctl（ad-hoc 预期 rejected）=="; spctl -a -vv "${SRC_APP}" 2>&1 || true
     echo "== 架构/minos =="; lipo -info "${SRC_APP}/Contents/MacOS/DeskTodo" 2>&1; vtool -show-build "${SRC_APP}/Contents/MacOS/DeskTodo" 2>/dev/null | grep minos
+    echo "== 机器 =="; system_profiler SPHardwareDataType 2>/dev/null | grep -E "Model Name|Model Identifier|Serial Number" | head -3
+    echo "== 签名身份 =="; codesign -dv --verbose=4 "${SRC_APP}" 2>&1 | grep -E "Signature|TeamIdentifier|Authority|CDHash"
   } > "${EVID}/01-artifact.txt" 2>&1
   {
     echo "EXPECTED_SHA=${ACTUAL_SHA}"
@@ -149,6 +151,7 @@ if [ "${MODE}" = "prepare" ]; then
 4) 截图两个授权弹窗、数据来源页、日历/提醒各一条，放入本证据目录（shot-*.png）。
 然后依次运行 collect → restart → denial。
 STEPS
+  tcc_write_manifest "${EVID}"
   echo "PHASE_PREPARE_OK"; echo "证据目录：${EVID}"; exit 0
 fi
 
@@ -170,11 +173,15 @@ if [ "${MODE}" = "collect" ]; then
   log show --start "${ID_START_LOCAL}" --predicate 'process == "tccd" AND (eventMessage CONTAINS[c] "deskTodo" OR eventMessage CONTAINS[c] "kTCCServiceCalendar" OR eventMessage CONTAINS[c] "kTCCServiceReminders")' 2>&1 | tail -400 > "${EVID}/04-tcc-log.txt" 2>/dev/null || : > "${EVID}/04-tcc-log.txt"
   pgrep -fl "DeskTodo.app/Contents/MacOS/DeskTodo" > "${EVID}/05-process.txt" 2>&1 || true
 
-  SHOTS=0; ls "${EVID}"/shot-*.png >/dev/null 2>&1 && SHOTS=1
+  SHOTS=0
+  if ( TCC_FAILS=0; tcc_verify_shots "${EVID}" "${ID_START_EPOCH}" "${EVID}/08-shots-verdict.txt" ); then SHOTS=1; fi
   TCC_FAILS=0
   if tcc_judge_collect "${EVID}/03-eventkit-log.txt" "${EVID}/04-tcc-log.txt" "${EVID}/90-verdict.txt" "${REQUIRE_EVENTS}" "${SHOTS}"; then
+    tcc_write_manifest "${EVID}"
     echo "PHASE_COLLECT_OK"; echo "证据：${EVID}"; exit 0
   else
+    { echo "# collect 失败详情 $(date -u +%Y-%m-%dT%H:%M:%SZ)"; echo "fails=${TCC_FAILS} shots_verified=${SHOTS}"; cat "${EVID}/08-shots-verdict.txt" "${EVID}/90-verdict.txt"; } > "${EVID}/FAIL-collect.txt"
+    tcc_write_manifest "${EVID}"
     echo "PHASE_COLLECT_FAIL (fails=${TCC_FAILS})"; echo "证据：${EVID}"; exit 5
   fi
 fi
@@ -197,8 +204,11 @@ if [ "${MODE}" = "restart" ]; then
   log show --start "${R_LOCAL}" --predicate 'process == "tccd" AND (eventMessage CONTAINS[c] "deskTODO" OR eventMessage CONTAINS[c] "kTCCServiceCalendar" OR eventMessage CONTAINS[c] "kTCCServiceReminders")' 2>&1 | tail -200 > "${EVID}/06-restart-tcc.txt" 2>/dev/null || : > "${EVID}/06-restart-tcc.txt"
   TCC_FAILS=0
   if tcc_judge_restart "${EVID}/06-restart-log.txt" "${EVID}/06-restart-tcc.txt" "${EVID}/91-restart-verdict.txt" "${REQUIRE_EVENTS}"; then
+    tcc_write_manifest "${EVID}"
     echo "PHASE_RESTART_OK"; exit 0
   else
+    { echo "# restart 失败详情 $(date -u +%Y-%m-%dT%H:%M:%SZ)"; echo "fails=${TCC_FAILS}"; cat "${EVID}/91-restart-verdict.txt"; } > "${EVID}/FAIL-restart.txt"
+    tcc_write_manifest "${EVID}"
     echo "PHASE_RESTART_FAIL (fails=${TCC_FAILS})"; exit 5
   fi
 fi
@@ -224,8 +234,11 @@ if [ "${MODE}" = "denial" ]; then
   log show --start "${D_LOCAL}" --predicate 'process == "tccd" AND (eventMessage CONTAINS[c] "deskTODO" OR eventMessage CONTAINS[c] "kTCCServiceCalendar" OR eventMessage CONTAINS[c] "kTCCServiceReminders")' 2>&1 | tail -200 > "${EVID}/07-denial-tcc.txt" 2>/dev/null || : > "${EVID}/07-denial-tcc.txt"
   TCC_FAILS=0
   if tcc_judge_denial "${EVID}/07-denial-log.txt" "${ALIVE}" "${EVID}/92-denial-verdict.txt"; then
+    tcc_write_manifest "${EVID}"
     echo "PHASE_DENIAL_OK"; exit 0
   else
+    { echo "# denial 失败详情 $(date -u +%Y-%m-%dT%H:%M:%SZ)"; echo "fails=${TCC_FAILS} alive=${ALIVE}"; cat "${EVID}/92-denial-verdict.txt"; } > "${EVID}/FAIL-denial.txt"
+    tcc_write_manifest "${EVID}"
     echo "PHASE_DENIAL_FAIL (fails=${TCC_FAILS})"; exit 5
   fi
 fi

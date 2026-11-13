@@ -117,6 +117,11 @@ tcc_judge_collect() {
   [ -s "${tccf}" ] && tcc_has=1
   grep -qiE 'Prompting policy' "${tccf}" 2>/dev/null && prompt=1
   [ "${shots}" = "1" ] && fallback=1
+  if [ "${shots}" = "1" ]; then
+    tcc_claim_ok "人工截图内容核验通过：日历/提醒弹窗分别有图、manifest 逐项可追溯" "${verdict}"
+  else
+    tcc_claim_fail "人工截图内容核验未通过：必须分别证明日历与提醒授权弹窗（不是只查文件存在）" "${verdict}"
+  fi
   if [ "${prompt}" = "1" ]; then
     tcc_claim_ok "tccd 记录到授权弹窗（Prompting policy）" "${verdict}"
   elif [ "${fallback}" = "1" ] && [ "$(grep -cE 'requestAccess\((cal|rem)\) ok=true' "${log}")" -ge 2 ]; then
@@ -235,4 +240,100 @@ tcc_read_identity() {
   [ -n "${ID_SHA}${ID_VERSION}${ID_BUILD}${ID_BID}${ID_CDHASH}${ID_START_ISO}${ID_START_UTC_KEY}${ID_START_LOCAL}${ID_START_EPOCH}" ] || { echo "identity.env 字段不完整" >&2; return 1; }
   [ "${ID_MACHINE}" = "${machine}" ] || { echo "identity.env 测试机标识不匹配" >&2; return 1; }
   return 0
+}
+
+# ── 人工截图内容核验（不是只查文件存在）────────────────────
+# 要求：
+#   1) 必须分别有日历与提醒的授权弹窗截图（两个文件、两张不同图片、合法 PNG、非空白占位）；
+#   2) 必须有 shots-manifest.tsv，逐图记录 dialog=calendar/reminder、观察到的标题/按钮、时间、拍摄人、机器、图片 sha256；
+#   3) 标题/按钮必须分别命中日历/提醒 + 允许类关键词；时间必须晚于本次测试开始；图片 hash 必须与文件一致；
+#   4) 机器字段必须非空，且若本机能读到序列号则必须一致。
+# 说明：脚本不内置 OCR；"内容"由拍摄人按 manifest 逐项自证 + 脚本强制结构/时间/哈希/关键词，
+#       原始 PNG 保留审计；无法提供两张独立弹窗截图即判失败。
+tcc_machine_serial() {
+  system_profiler SPHardwareDataType 2>/dev/null | awk -F': ' '/Serial Number/{print $2; exit}'
+}
+
+tcc_png_dims() { # width height
+  local f="$1" w h
+  w="$(sips -g pixelWidth "$f" 2>/dev/null | awk '/pixelWidth/{print $2}' | head -1)"
+  h="$(sips -g pixelHeight "$f" 2>/dev/null | awk '/pixelHeight/{print $2}' | head -1)"
+  printf '%s %s' "${w:-0}" "${h:-0}"
+}
+
+tcc_verify_shots() { # evid start_epoch verdict
+  local evid="$1" start="$2" verdict="$3"
+  local cal rem MAN h1 h2 serial row f dlg title buttons at by machine imghash img sig size dims w h
+  : > "$verdict"
+  cal="$evid/shot-calendar-prompt.png"; rem="$evid/shot-reminder-prompt.png"; MAN="$evid/shots-manifest.tsv"
+
+  [ -f "$cal" ] && tcc_claim_ok "存在日历授权弹窗截图 shot-calendar-prompt.png" "$verdict" || tcc_claim_fail "缺少日历授权弹窗截图 shot-calendar-prompt.png" "$verdict"
+  [ -f "$rem" ] && tcc_claim_ok "存在提醒事项授权弹窗截图 shot-reminder-prompt.png" "$verdict" || tcc_claim_fail "缺少提醒事项授权弹窗截图 shot-reminder-prompt.png" "$verdict"
+
+  for img in "$cal" "$rem"; do
+    [ -f "$img" ] || continue
+    sig="$(head -c 8 "$img" | od -An -tx1 | tr -d ' ')"
+    TRIM_SIG="$(printf '%s' "$sig" | tr -d ' \n')"
+    case "$TRIM_SIG" in 89504e470d0a1a0a) tcc_claim_ok "$(basename "$img") 是合法 PNG" "$verdict" ;; *) tcc_claim_fail "$(basename "$img") 不是合法 PNG" "$verdict" ;; esac
+    size="$(stat -f%z "$img" 2>/dev/null || echo 0)"
+    [ "${size:-0}" -ge 15000 ] && tcc_claim_ok "$(basename "$img") 大小 ${size}B（非空白占位）" "$verdict" || tcc_claim_fail "$(basename "$img") 太小（${size}B），疑似空白/占位图" "$verdict"
+    dims="$(tcc_png_dims "$img")"; w="${dims%% *}"; h="${dims##* }"
+    [ "${w:-0}" -ge 300 ] && [ "${h:-0}" -ge 200 ] && tcc_claim_ok "$(basename "$img") 尺寸 ${w}x${h}" "$verdict" || tcc_claim_fail "$(basename "$img") 尺寸过小（${w}x${h}）" "$verdict"
+  done
+
+  if [ -f "$cal" ] && [ -f "$rem" ]; then
+    h1="$(shasum -a 256 "$cal" | awk '{print $1}')"; h2="$(shasum -a 256 "$rem" | awk '{print $1}')"
+    [ "$h1" != "$h2" ] && tcc_claim_ok "日历/提醒两张截图内容不同（不能复用同一张）" "$verdict" || tcc_claim_fail "日历/提醒截图完全相同，不能分别证明两个弹窗" "$verdict"
+  fi
+
+  if [ ! -f "$MAN" ]; then
+    tcc_claim_fail "缺少 shots-manifest.tsv（需要逐图记录弹窗内容证据）" "$verdict"
+    [ "$TCC_FAILS" -eq 0 ] && return 0 || return 1
+  fi
+  local header; header="$(head -1 "$MAN")"
+  case "$header" in
+    *file*dialog*title*buttons*"captured_at"*"captured_by"*machine*image_sha256*)
+      tcc_claim_ok "shots-manifest.tsv 表头完整" "$verdict" ;;
+    *) tcc_claim_fail "shots-manifest.tsv 表头缺少必需列" "$verdict" ;;
+  esac
+  serial="$(tcc_machine_serial)"
+
+  local pair want_file want_dlg want_kw
+  for pair in "calendar:shot-calendar-prompt.png:日历|Calendar|calendar" "reminder:shot-reminder-prompt.png:提醒事项|Reminders|reminder"; do
+    want_dlg="${pair%%:*}"; pair="${pair#*:}"; want_file="${pair%%:*}"; want_kw="${pair#*:}"
+    row="$(grep -E "^${want_file}	" "$MAN" | head -1 || true)"
+    if [ -z "$row" ]; then
+      tcc_claim_fail "manifest 缺少 ${want_file} 行" "$verdict"; continue
+    fi
+    f=""; dlg=""; title=""; buttons=""; at=""; by=""; machine=""; imghash=""
+    while IFS=$'\t' read -r a b c d e g i j; do
+      f="$a"; dlg="$b"; title="$c"; buttons="$d"; at="$e"; by="$g"; machine="$i"; imghash="$j"
+    done < <(printf '%s\n' "$row")
+    [ "$f" = "$want_file" ] && tcc_claim_ok "${want_file} 文件名/行首一致" "$verdict" || tcc_claim_fail "${want_file} 行首文件名不一致：$f" "$verdict"
+    [ "$dlg" = "$want_dlg" ] && tcc_claim_ok "${want_file} dialog=${want_dlg}" "$verdict" || tcc_claim_fail "${want_file} dialog 字段错误：$dlg" "$verdict"
+    if printf '%s' "$title" | grep -qE "$want_kw"; then tcc_claim_ok "${want_file} 标题命中关键词：$title" "$verdict"; else tcc_claim_fail "${want_file} 标题未命中关键词（$title）" "$verdict"; fi
+    if printf '%s' "$buttons" | grep -qE '允许|Allow|好|OK'; then tcc_claim_ok "${want_file} 按钮含允许类按钮：$buttons" "$verdict"; else tcc_claim_fail "${want_file} 按钮未记录允许类按钮（$buttons）" "$verdict"; fi
+    local at_epoch=""
+    [ -n "$at" ] && at_epoch="$(tcc_epoch_of_ts "$at")"
+    if [ -n "$at_epoch" ] && [ "$at_epoch" -ge "$start" ] 2>/dev/null; then tcc_claim_ok "${want_file} 拍摄时间在本次测试开始之后" "$verdict"; else tcc_claim_fail "${want_file} 拍摄时间缺失/早于本次测试开始（$at）" "$verdict"; fi
+    [ -n "$by" ] && tcc_claim_ok "${want_file} 拍摄人已记录" "$verdict" || tcc_claim_fail "${want_file} 缺少拍摄人" "$verdict"
+    [ -n "$machine" ] && tcc_claim_ok "${want_file} 机器已记录：$machine" "$verdict" || tcc_claim_fail "${want_file} 缺少机器信息" "$verdict"
+    if [ -n "$serial" ] && [ -n "$machine" ] && [ "$machine" != "$serial" ]; then
+      tcc_claim_fail "${want_file} 机器序列号与本机不一致（$machine != $serial）" "$verdict"
+    fi
+    local fh; fh="$(shasum -a 256 "$evid/$f" 2>/dev/null | awk '{print $1}')"
+    [ -n "$imghash" ] && [ "$imghash" = "$fh" ] && tcc_claim_ok "${want_file} 图片哈希与 manifest 一致" "$verdict" || tcc_claim_fail "${want_file} 图片哈希与 manifest 不一致" "$verdict"
+  done
+  [ "$TCC_FAILS" -eq 0 ] && return 0 || return 1
+}
+
+# 证据封存：对目录内所有文件生成 SHA-256 清单（按路径排序）
+tcc_write_manifest() {
+  local evid="$1" f
+  (
+    cd "$evid" || exit 1
+    find . -type f ! -name 'MANIFEST.sha256' | LC_ALL=C sort | while IFS= read -r f; do
+      shasum -a 256 "$f"
+    done
+  ) > "$evid/MANIFEST.sha256"
 }
